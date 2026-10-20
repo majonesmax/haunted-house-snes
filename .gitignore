@@ -1,0 +1,10 @@
+build/
+cores/
+private/
+tools/pvsneslib/
+tools/tad/
+.venv/
+__pycache__/
+*.sfc
+*.smc
+shots/
