@@ -3,6 +3,29 @@
 The choices made in building the SNES game, newest first, each with what else was considered. The NES
 game's log is the model for this one.
 
+## 2026-10-20: the status band on the third layer; the panels, the lightning, dying and the cheat as colour math
+
+- **The status band is BG3**, the SNES's 4-colour layer, with its priority bit set so it sits in front of
+  the floor's layers; its tiles (the remaster's 5x7 font with its drop shadow, the item slots, the burning
+  match, the lives' eyes) are made by `tools/make_pictures.py` from the same pictures the NES game's band
+  uses, and its layout is the NES game's. The letters are drawn once and coloured by the map entry's
+  palette (white, grey, dim grey), so one font serves all three. The band is worked out again only when
+  something it shows has changed - the check for that is in assembly (`status_key_changed`,
+  src/fast.asm), because in C the looking alone cost a tenth of the frame - and sent by DMA in the next
+  blank. Considered: sprites for the numbers (the sprite table is the cast's); the band drawn into the
+  floor's layers (they scroll).
+- **The panels are the backdrop colour, changed line by line by HDMA** (the remaster's SNES look's
+  gradient with its bevel), and a second HDMA channel turns the floor's layers off on the band's lines
+  (the layers scroll under the band; BG3's tiles are see-through where they're not ink). The windows
+  couldn't do it: in game 1 the walls aren't masked at all. Three HDMA channels (the light's, these two)
+  cost about four scanlines of CPU time a frame.
+- **The lightning, dying and the lights-on cheat reuse the light's colour math.** A flash (the spec's
+  rule, as the NES game's `lightning_now`) unmasks the walls and adds a pale blue fixed colour to them
+  outside the light; dying adds a pulsing red to the view's layers everywhere (the bands' backdrop and
+  the band itself left alone); the cheat masks nothing and does no math. The registers are written only
+  when the rules change. The cheat is the NES game's: the button held, Select toggles it, and the game
+  doesn't hear that Select. In game 1 the walls stay moonlit through a flash, as the SNES look has it.
+
 ## The hard parts
 
 - **The compiler is wrong about some conditions.** 816-tcc compiles `a || !b || c`, `!a || b` and
@@ -10,6 +33,17 @@ game's log is the model for this one.
   first in touching, where a dying player was caught again every frame). `tests/test_compiler.py` builds a
   small ROM of such conditions and compares the compiler's answers with the truth, so the shapes that are
   safe to write are known, and CLAUDE.md says which to avoid.
+- **The library's DMA takes the bank from the pointer, and a pointer to work RAM doesn't carry one.**
+  `dmaCopyVram` copies from ROM fine; from a C array in work RAM it copies nothing (the array is above
+  the 8K mirrored into bank 0). Anything in work RAM going to video memory by DMA sets the channel's
+  registers itself with bank $7E (src/status.c `send_band`, as the HDMA tables do).
+- **The blank is short, and the drawing isn't.** The vertical blank is lines 225-261 and the drawing
+  starts about line 231 after the library's own work; the cast's sprites take 18-40 lines of it and the
+  light's table 6-45 (both C), so the drawing runs on into the picture. That's harmless for the sprite
+  table (the library copies it in the next blank) and the HDMA tables (read line by line), but video
+  memory takes writes only in the blank: the band's DMA, and a floor's pieces, go first. The light goes
+  before the cast, since its table is read from the top of the picture. `draw_end_line` (picture.c) says
+  where the drawing ended.
 - **A frame is about 59,000 cycles, and this compiler's code spends them fast**: roughly a scanline of
   the 262 for every five statements, a few hundred cycles a call, a loop for every shift by a variable
   amount. The touching pass (src/touching.c) first walked every scanline with several calls each and took

@@ -114,7 +114,7 @@ class SnesLab:
 
     def late_frames(self) -> int:
         """The ROM's own count of frames that ran late (it agrees with `late`, counted from outside)."""
-        return int(self.snes.ram[self.late_at])
+        return int(self.snes.ram[self.late_at]) | int(self.snes.ram[self.late_at + 1]) << 8
 
 
 def main() -> None:

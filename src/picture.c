@@ -6,15 +6,16 @@
 #include "engine.h"
 #include "art.h"
 
-/* Video memory, in words (the SNES counts it so): the two layers' maps, the status band's, the tiles. */
+/* Video memory, in words (the SNES counts it so): the two layers' maps, the status band's tiles and
+   map (status.c), the floors' tiles, the sprites'. */
 #define VRAM_WALLS_MAP 0x0000    /* 32 x 64 tiles: 4K */
 #define VRAM_FLOOR_MAP 0x0800
-#define VRAM_STATUS_MAP 0x1000   /* 32 x 32 tiles: 2K */
+#define VRAM_STATUS 0x1000       /* the band's tiles and map: 2K */
 #define VRAM_TILES 0x2000        /* the floors' tiles: up to 32K */
 #define VRAM_SPRITES 0x6000      /* 16K */
 #define WALLS_LAYER 0            /* BG1: above the floor */
 #define FLOOR_LAYER 1            /* BG2 */
-#define STATUS_LAYER 2           /* BG3 */
+#define STATUS_LAYER 2           /* BG3: in front of both, where it has anything to show */
 #define FLOOR_PALETTES_AT 16     /* colours: BG palette 1; the band has palette 0 */
 #define FLOOR_PALETTES_SIZE (7 * 16 * 2)
 #define MAP_SIZE (32 * 64 * 2)
@@ -36,15 +37,16 @@ static u8 loading_floor = NO_FLOOR; /* ...and the one on its way there, a piece 
 static u8 loading_step;             /* which piece: the tiles, the walls' map, the floor's map, the palettes */
 static u16 loaded;                  /* bytes of the piece copied so far */
 static FloorPictures loading;
+u16 draw_end_line;                  /* the scanline the picture's drawing ended on (the blank is 225-261) */
 
 void set_up_picture(void)
 {
-    setMode(BG_MODE1, 0);
+    setMode(BG_MODE1, BG3_MODE1_PRIORITY_HIGH);
     bgSetGfxPtr(WALLS_LAYER, VRAM_TILES);
     bgSetGfxPtr(FLOOR_LAYER, VRAM_TILES);
     bgSetMapPtr(WALLS_LAYER, VRAM_WALLS_MAP, SC_32x64);
     bgSetMapPtr(FLOOR_LAYER, VRAM_FLOOR_MAP, SC_32x64);
-    bgSetDisable(STATUS_LAYER);
+    set_up_status();
     oamInitGfxSet((u8 *)&cast_tiles, (u16)(&cast_tiles_end - &cast_tiles), (u8 *)&cast_palettes,
                   (u16)(&cast_palettes_end - &cast_palettes), 0, VRAM_SPRITES, OBJ_SIZE16_L32);
     set_up_cast();
@@ -55,15 +57,15 @@ void set_up_picture(void)
 }
 
 /* Start bringing a floor's pictures into video memory. The SNES takes them only in the vertical blank,
-   and not all at once, so they come a piece a frame with the layers hidden, and the game goes on meanwhile. */
+   and not all at once, so they come a piece a frame with the floor's layers hidden, and the game goes on
+   meanwhile. */
 static void start_loading(u8 floor)
 {
     floor_art(floor, &loading);
     loading_floor = floor;
     loading_step = 0;
     loaded = 0;
-    bgSetDisable(WALLS_LAYER);   /* (not the screen off: that changes the frame's timing underfoot) */
-    bgSetDisable(FLOOR_LAYER);
+    show_view_layers(0);         /* (not the screen off: that changes the frame's timing underfoot) */
 }
 
 /* One piece of a loading floor, in this vertical blank: at most LOAD_CHUNK bytes of the tiles, then the
@@ -97,8 +99,8 @@ static void load_some(void)
         if (loading_step > 3) {
             shown_floor = loading_floor;
             loading_floor = NO_FLOOR;
-            bgSetEnable(WALLS_LAYER);
-            bgSetEnable(FLOOR_LAYER);
+            show_view_layers(1);
+            status_floor_shown(shown_floor);
         }
     }
 }
@@ -112,7 +114,7 @@ static u16 view_top_row(void)
     return (u16)(FLOOR_LINES - 1 - top_line) * UNIT_Y;
 }
 
-/* Each frame, in the vertical blank: the layers scrolled to the view. */
+/* Each frame, in the vertical blank: the layers scrolled to the view, and the rest of the picture. */
 void draw_frame(void)
 {
     u16 scroll_y;
@@ -121,9 +123,11 @@ void draw_frame(void)
     } else if (RAM(FLOOR) != shown_floor && RAM(FLOOR) < ART_FLOORS) {
         start_loading(RAM(FLOOR));
     }
+    send_status();            /* (video memory takes writes only in the blank: those come first) */
     scroll_y = view_top_row() - VIEW_Y;
     bgSetScroll(WALLS_LAYER, (u16)(0 - VIEW_X), scroll_y);
     bgSetScroll(FLOOR_LAYER, (u16)(0 - VIEW_X), scroll_y);
-    draw_cast();
-    draw_light();
+    draw_light();             /* (its HDMA table is read from the top of the picture: before the cast, */
+    draw_cast();              /* whose sprite table goes to the console in the next blank) */
+    draw_end_line = scanline_now();
 }

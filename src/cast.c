@@ -191,14 +191,21 @@ static u8 item_visible(u8 item)
     if (item >= URN && RAM(URN_SHAPES + item - URN) == JOINED) {
         return 0;
     }
+    if (lights_on) {
+        return 1;
+    }
     return light_distance(RAM(ITEM_X + item), RAM(ITEM_Y + item)) < ITEM_REACH;
 }
 
 static void draw_items(void)
 {
     u8 item;
+    u8 lit = RAM(FLAGS) & MATCH_LIT;
     slot = ITEM_SLOTS;
-    if (RAM(FLAGS) & MATCH_LIT) {
+    if (lights_on) {
+        lit = 1;
+    }
+    if (lit) {
         for (item = 0; item < 5; item++) {
             u8 picture;
             if (!item_visible(item)) {
@@ -222,7 +229,7 @@ static void draw_items(void)
 static u8 monster_visible(u8 monster)
 {
     u8 room;
-    if (RAM(GAME_NUMBER) == 0 || RAM(DEATH_TIMER)) {
+    if (RAM(GAME_NUMBER) == 0 || RAM(DEATH_TIMER) || lights_on) {
         return 1;
     }
     room = RAM(MONSTER_ROOM + monster);
@@ -302,8 +309,12 @@ static void draw_stairs(void)
 {
     u8 here = RAM(STAIRS) & NO_STAIRS;
     u8 floor = RAM(FLOOR);
+    u8 lit = RAM(FLAGS) & MATCH_LIT;
     slot = STAIRS_SLOTS;
-    if ((RAM(FLAGS) & MATCH_LIT) && here != NO_STAIRS) {
+    if (lights_on) {
+        lit = 1;
+    }
+    if (lit && here != NO_STAIRS) {
         u8 x = stairs_x[(floor << 2) + (floor << 1) + RAM(ROOM)];   /* (6 a floor) */
         u8 y = stairs_y[(floor << 2) + (here & 3)];                  /* (4 a floor) */
         place((here & GOES_UP) ? CAST_STAIRS_UP : CAST_STAIRS_DOWN, SCREEN_X(x), SCREEN_Y(y, STAIRS_HEIGHT), 0);

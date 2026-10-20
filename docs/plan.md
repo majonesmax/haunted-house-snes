@@ -64,7 +64,11 @@ lightning switch is a setting on the title, Y the hint, Y + Select the lights-on
 2. **The picture** - the SNES look: the floors in 16-colour tiles from the nocturne pack (the remaster's
    scenery code draws them, cut by `tools/make_pictures.py`); the status band; the match's
    light as colour math in a window round the eyes, its gradient by HDMA; the moonlight; sprites with soft
-   outlines; the ghost on a translucent layer.
+   outlines; the ghost on a translucent layer. Done so far: the floors on two layers, the cast, the light
+   (the lit disc and the dim ring as two windows), the moonlit walls of game 1, the status band on BG3
+   over HDMA-painted panels, the lightning's wash, dying's red, the lights-on cheat (the button held,
+   Select). Still to do: the ghost's translucency (it conflicts with the ring's fixed-colour math),
+   the match's flicker, a dim floor outside the light in game 1 (the look's moon shafts).
 3. **The sound** - the driver in; the orchestra's instruments rendered short and encoded as samples; the
    songs from the pack's `music.json` written out as MML; the twenty effects.
 4. **The screens** - the story, the title with its rain and fading lightning, the help, game over, the

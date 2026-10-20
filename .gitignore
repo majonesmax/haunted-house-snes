@@ -17,6 +17,7 @@ shots/
 /linkfile
 src/*.ps
 src/*.asm
+!src/fast.asm
 src/*.obj
 tests/compiler_check/*.sfc
 tests/compiler_check/*.sym
@@ -26,5 +27,6 @@ tests/compiler_check/hdr.asm
 tests/compiler_check/linkfile
 tests/compiler_check/src/*.ps
 tests/compiler_check/src/*.asm
+!src/fast.asm
 tests/compiler_check/src/*.obj
 src/art_data.asm

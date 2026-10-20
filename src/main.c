@@ -13,7 +13,8 @@ u8 game_ram[128];    /* the game's state, at the 2600's offsets (state.h) */
 u16 frame_count;     /* frames since the program started */
 u16 frames_done;     /* game frames worked out to the end (the checks wait for this to move on) */
 u8 ready_flag;       /* READY once the console is set up */
-u8 late_frames;      /* frames that took longer than a frame to work out: the checks fail on any */
+u8 lights_on;        /* the player's cheat (the remaster's O key): the whole floor lit, everything shown */
+u16 late_frames;     /* frames that took longer than a frame to work out (the checks allow a few) */
 u16 end_line;        /* the scanline the last frame's work ended on (of 262): how near the limit it came */
 u16 busiest_line;    /* the lowest such line ever... */
 u16 busiest_frame;   /* ...and which frame that was */
@@ -64,6 +65,12 @@ static void read_controls(Controls *controls)
     controls->button = (pad & (KEY_B | KEY_A)) != 0;
     controls->reset = (pad & KEY_START) != 0;
     controls->select = (pad & KEY_SELECT) != 0;
+    if (controls->button) {   /* the button held: Select is the cheat's (as the NES game), not the game's */
+        controls->select = 0;
+        if (padsDown(0) & KEY_SELECT) {
+            lights_on ^= 1;
+        }
+    }
 }
 
 /* Power-on: the game sets itself up as if RESET had been pressed, then goes to select mode with game 1.
@@ -80,6 +87,7 @@ static void power_on(void)
     end_line = 0;
     busiest_line = 0;
     busiest_frame = 0;
+    lights_on = 0;
     RAM(RANDOM_LOW) = RANDOM_SEED_LOW;
     RAM(RANDOM_HIGH) = RANDOM_SEED_HIGH;
     set_up_columns();
@@ -101,6 +109,7 @@ int main(void)
         draw_frame();         /* first thing in the vertical blank: the picture of the frame just worked out */
         read_controls(&controls);
         game_frame(&controls);
+        compose_status();     /* the status band, if what it shows has changed */
         frames_done++;
         note_busiest();
         WaitForVBlank();

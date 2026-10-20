@@ -41,10 +41,12 @@ u16 scanline_now(void);   /* the scanline the picture is on: how far into the fr
 
 /* main.c */
 extern u16 frame_count;   /* frames since the program started: the pictures animate by it */
+extern u8 lights_on;      /* the player's cheat: the whole floor lit, everything on it shown (not the game's) */
 
 /* picture.c */
 void set_up_picture(void);
 void draw_frame(void);
+extern u16 draw_end_line;   /* the scanline the last frame's drawing ended on: it must stay in the blank */
 
 /* cast.c */
 void set_up_cast(void);
@@ -53,6 +55,18 @@ void draw_cast(void);
 /* light.c */
 void set_up_light(void);
 void draw_light(void);
+
+/* status.c */
+void set_up_status(void);
+void compose_status(void);
+void send_status(void);
+void status_floor_shown(u8 floor);
+void show_view_layers(u8 shown);
+
+/* HDMA, shared by light.c (the windows, channel 3) and status.c (the layers and the backdrop, 4 and 5);
+   channel 7 is the library's. The enable register can't be read, so whoever writes it enables all. */
+#define HDMA_CHANNELS ((1 << 3) | (1 << 4) | (1 << 5))
+#define HDMA_REPEAT 0x80         /* a table entry's count with this bit: a line's own bytes each line */
 
 /* player.c */
 void game_frame(const Controls *controls);
