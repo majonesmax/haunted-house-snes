@@ -47,6 +47,10 @@ def symbols(shareable: bool = True) -> dict[str, int]:
     return found
 
 
+def rom_path(shareable: bool = True) -> str:
+    return os.path.join(output_folder(shareable), ROM_NAME + ".sfc")
+
+
 def shareable_wanted(arguments: list[str]) -> bool:
     return "--faithful" not in arguments
 

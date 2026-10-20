@@ -11,10 +11,19 @@ are as they are: [docs/decisions.md](docs/decisions.md).
 
 ## Commands
 
-(To come with step 0 of the plan. The shape, as the NES game's: `tools/get_tools.py` fetches PVSnesLib, the
-audio driver and the emulator core; `tools/build.py` makes `build/shareable/haunted_house.sfc` and, with
-your 2600 ROM, `build/faithful/`; `tests/verify_engine.py` checks the engine frame by frame; `python
-tools/readability.py` runs the code rules.)
+```sh
+python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
+python tools/get_tools.py               # PVSnesLib, the audio driver's source and the snes9x core (not committed)
+python tools/build.py                   # build/shareable/haunted_house.sfc (the NES game's mansion)
+python tools/build.py --faithful        # build/faithful/: the original's mansion, from your 2600 ROM (never shared)
+python tools/play.py [--faithful]       # play it: a window with the picture, the sound, and a map of the engine's state
+python tools/screenshot.py NAME 60 10:start 30   # play some frames, save shots/NAME.png
+python tests/test_boot.py [--faithful]  # the ROM boots and counts frames
+python tests/verify_engine.py [--shareable] [frames] [seed]   # the engine against the remaster's model, frame
+                                        # by frame (run it after any change to src/, on both builds)
+python tests/test_compiler.py           # the compiler's wrong condition shapes are the known ones
+ruff check --config ruff.toml . && python tools/readability.py && pyright   # the code rules
+```
 
 ## Rules
 
