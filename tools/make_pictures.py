@@ -420,15 +420,64 @@ def cast_header_text(placed: list[CastPicture]) -> str:
     lines += ["", f"#define CAST_PICTURES {len(placed)}",
               "/* Each picture: its first block's tile number; its 16 x 16 blocks across and down (left to",
               "   right, top to bottom); its palette. (Four tables, not one of records: a record's size",
-              "   would cost a multiply on every lookup.) */"]
+              "   would cost a multiply on every lookup. Include this header in one C file only.) */"]
     for name, values in (("cast_tile", [str(block_tile(picture.first_block)) for picture in placed]),
                          ("cast_wide", [str(picture.blocks_wide) for picture in placed]),
                          ("cast_high", [str(picture.blocks_high) for picture in placed]),
                          ("cast_palette", [str(picture.palette) for picture in placed])):
         kind = "u16" if name == "cast_tile" else "u8"
-        lines.append(f"static const {kind} {name}[CAST_PICTURES] = {{")
+        lines.append(f"const {kind} {name}[CAST_PICTURES] = {{")   # (not static: the assembly reads them)
         for start in range(0, len(values), 16):
             lines.append("    " + ", ".join(values[start:start + 16]) + ",")
+        lines.append("};")
+    lines += ["", "#endif", ""]
+    return "\n".join(lines)
+
+
+# --- the match's light -------------------------------------------------------------------------------
+# The SNES look's light: fully lit within LIGHT_FULL of the light's reach (the 2600 glow: 16 units
+# across, 14 lines up, from the eyes' middle), fading to nothing at LIGHT_GONE. On the SNES, two windows
+# round the eyes - the lit disc and the dim ring round it - as half-widths a scanline, in pixels: 1.5 a
+# unit across, 2 a line up.
+LIGHT_FULL, LIGHT_GONE = 0.55, 1.3              # (looks/snes/look.py)
+LIGHT_HALF_WIDTH, LIGHT_HALF_HEIGHT = 16, 14    # (game/visibility.py)
+CLOSED = 0xFF                                   # a row with no window
+
+
+def light_shapes() -> tuple[list[int], list[int]]:
+    """(inner, outer): each row's half-width in pixels, over the outer disc's rows, top to bottom."""
+    outer_x, outer_y = LIGHT_HALF_WIDTH * 1.5 * LIGHT_GONE, LIGHT_HALF_HEIGHT * 2 * LIGHT_GONE
+    inner_x, inner_y = LIGHT_HALF_WIDTH * 1.5 * LIGHT_FULL, LIGHT_HALF_HEIGHT * 2 * LIGHT_FULL
+    rows = int(outer_y)
+    inner, outer = [], []
+    for row in range(-rows, rows + 1):
+        outer.append(int(outer_x * (1 - (row / outer_y) ** 2) ** 0.5))
+        inside = abs(row) < inner_y
+        inner.append(int(inner_x * (1 - (row / inner_y) ** 2) ** 0.5) if inside else CLOSED)
+    return inner, outer
+
+
+def light_text() -> str:
+    """light.h: the two shapes, and the rows they span."""
+    inner, outer = light_shapes()
+    lines = ["/* The match's light: the lit disc and the dim ring, a half-width a scanline (0xFF: none):",
+             "   tools/make_pictures.py. Don't edit. */", "#ifndef LIGHT_H", "#define LIGHT_H",
+             "#include <snes.h>", "", f"#define LIGHT_ROWS {len(outer)}",
+             f"#define LIGHT_MIDDLE_ROW {len(outer) // 2}   /* the row through the eyes' middle */", ""]
+    for name, values in (("light_inner_shape", inner), ("light_outer_shape", outer)):
+        lines.append(f"const u8 {name}[LIGHT_ROWS] = {{")
+        for start in range(0, len(values), 16):
+            lines.append("    " + ", ".join(str(value) for value in values[start:start + 16]) + ",")
+        lines.append("};")
+    lines += ["", "/* The same as pairs for one 16-bit add each (src/fast.asm, light_rows' quick loop): the",
+              "   low byte 256 - w, the high byte w - 1, so adding the centre to both bytes at once gives",
+              "   centre - w and centre + w (the low byte's carry makes up the 1). 0xFF00: no window. */",
+              "#define LIGHT_NO_WINDOW_PAIR 0xFF00"]
+    for name, values in (("light_inner_pairs", inner), ("light_outer_pairs", outer)):
+        pairs = [0xFF00 if value == CLOSED else ((value - 1) << 8) | (256 - value) for value in values]
+        lines.append(f"const u16 {name}[LIGHT_ROWS] = {{")
+        for start in range(0, len(pairs), 12):
+            lines.append("    " + ", ".join(f"0x{value:04X}" for value in pairs[start:start + 12]) + ",")
         lines.append("};")
     lines += ["", "#endif", ""]
     return "\n".join(lines)
@@ -499,6 +548,8 @@ def write(kind_folder: str, shareable: bool) -> None:
         header.write(cast_header_text(placed))
     with open(os.path.join(kind_folder, "art.h"), "w") as header:
         header.write(header_text(len(names)))
+    with open(os.path.join(kind_folder, "light.h"), "w") as header:
+        header.write(light_text())
     with open(os.path.join(ROOT, "src", "art_data.asm"), "w") as asm:
         asm.write(asm_text(folder, len(names)))
 

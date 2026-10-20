@@ -50,6 +50,10 @@ void draw_frame(void);
 void set_up_cast(void);
 void draw_cast(void);
 
+/* light.c */
+void set_up_light(void);
+void draw_light(void);
+
 /* player.c */
 void game_frame(const Controls *controls);
 void new_game(void);

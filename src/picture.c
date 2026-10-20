@@ -48,6 +48,8 @@ void set_up_picture(void)
     oamInitGfxSet((u8 *)&cast_tiles, (u16)(&cast_tiles_end - &cast_tiles), (u8 *)&cast_palettes,
                   (u16)(&cast_palettes_end - &cast_palettes), 0, VRAM_SPRITES, OBJ_SIZE16_L32);
     set_up_cast();
+    set_up_light();
+    setPaletteColor(0, 0);   /* the backdrop: black, the dark beyond the light */
     shown_floor = NO_FLOOR;
     loading_floor = NO_FLOOR;
 }
@@ -123,4 +125,5 @@ void draw_frame(void)
     bgSetScroll(WALLS_LAYER, (u16)(0 - VIEW_X), scroll_y);
     bgSetScroll(FLOOR_LAYER, (u16)(0 - VIEW_X), scroll_y);
     draw_cast();
+    draw_light();
 }

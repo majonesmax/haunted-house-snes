@@ -45,7 +45,23 @@
 #define ITEMS_ON_FRAME 1         /* the items are drawn on frames 1 of 4, the stairs on frames 3 */
 #define STAIRS_ON_FRAME 3
 
-static u8 slot;                              /* the next sprite entry to write */
+/* What cast_put (src/fast.asm) takes: a picture's place and blocks; it writes the entries from cast_slot. */
+u8 cast_slot;                                /* the next sprite entry to write */
+u8 place_left;
+u8 place_top;
+u8 place_wide;
+u8 place_high;
+u8 place_tile;
+u8 place_attr;
+u8 place_mirrored;
+u8 put_rows_left;                            /* cast_put's own working bytes */
+u8 put_blocks_left;
+u8 put_x;
+u8 put_y;
+u8 put_tile;
+u8 put_row_tile;
+void cast_put(void);
+#define slot cast_slot
 static u8 eyes_used;                         /* entries each kind used last time */
 static u8 monsters_used;
 static u8 items_used;
@@ -66,47 +82,26 @@ static u8 blink_clock;                       /* counts the frames to the next bl
 
 static u8 view_bottom;                       /* the view's bottom line, this frame */
 
-/* One 16 x 16 sprite into the next entry of the sprite table the library sends to the SNES each frame:
-   its four bytes (x, y, the tile, and flips / priority / palette / the tile's ninth bit), and its two bits
-   in the table's tail (the x's ninth bit for a sprite off the left edge, and the size: small). */
-static void put_sprite(s16 x, s16 y, u16 tile, u8 palette, u8 mirrored)
-{
-    u8 *entry = oamMemory + (slot << 2);
-    u8 *tail = oamMemory + 512 + (slot >> 2);
-    u8 shift = (slot & 3) << 1;
-    entry[0] = (u8)x;
-    entry[1] = (u8)y;
-    entry[2] = (u8)tile;
-    entry[3] = (u8)((mirrored ? 0x40 : 0) | (IN_FRONT << 4) | (palette << 1) | ((tile >> 8) & 1));
-    *tail &= (u8)~(3 << shift);
-    if (x < 0) {
-        *tail |= (u8)(1 << shift);
-    }
-    slot++;
-}
-
-/* A picture's frame on the screen, its middle at (centre_x, centre_y), mirrored if asked: a sprite entry
-   per 16 x 16 block. Nothing is drawn outside the view. */
+/* A picture on the screen, its middle at (centre_x, centre_y), mirrored if asked: a sprite entry per
+   16 x 16 block, written by cast_put (src/fast.asm). Nothing is drawn outside the view's lines; nothing
+   ever reaches past the screen's left edge (the floor starts 8 pixels in), so a sprite's x fits a byte.
+   The entry's fourth byte: flips, priority, palette, and the tile number's ninth bit. */
 static void place(u8 picture, s16 centre_x, s16 centre_y, u8 mirrored)
 {
-    u8 wide = cast_wide[picture];
     u8 high = cast_high[picture];
-    u8 palette = cast_palette[picture];
     u16 tile = cast_tile[picture];
-    s16 left = centre_x - (wide << 3);
     s16 top = centre_y - (high << 3);
-    u8 block_y;
     if (top + (high << 4) <= VIEW_Y || top >= VIEW_Y + VIEW_HEIGHT) {
         return;
     }
-    for (block_y = 0; block_y < high; block_y++, top += 16, tile += 32) {
-        if (wide == 1) {
-            put_sprite(left, top, tile, palette, mirrored);
-        } else {   /* (two blocks wide: mirrored, the right one's picture goes on the left) */
-            put_sprite(left, top, mirrored ? tile + 2 : tile, palette, mirrored);
-            put_sprite(left + 16, top, mirrored ? tile : tile + 2, palette, mirrored);
-        }
-    }
+    place_wide = cast_wide[picture];
+    place_high = high;
+    place_left = (u8)(centre_x - (place_wide << 3));
+    place_top = (u8)top;
+    place_tile = (u8)tile;
+    place_attr = (u8)((mirrored ? 0x40 : 0) | (IN_FRONT << 4) | (cast_palette[picture] << 1) | (tile >> 8));
+    place_mirrored = mirrored;
+    cast_put();
 }
 
 /* Hide the entries a kind used last time beyond the ones it used now. */
@@ -334,6 +329,7 @@ void draw_cast(void)
         slot = STAIRS_SLOTS;
         hide_rest(stairs_used);
         stairs_used = slot;
+        oamUpdate();
         return;
     }
     draw_monsters();
@@ -342,11 +338,16 @@ void draw_cast(void)
     } else if (phase == STAIRS_ON_FRAME) {
         draw_stairs();
     }
+    oamUpdate();   /* the table to the SNES (the library's own sprite calls would ask for this themselves) */
 }
 
 void set_up_cast(void)
 {
+    u16 index;
     oamInit();
+    for (index = 512; index < 512 + 32; index++) {   /* every sprite small, and on the screen's left side */
+        oamMemory[index] = 0;
+    }
     eyes_used = EYES_SLOTS;
     monsters_used = MONSTER_SLOTS;
     items_used = ITEM_SLOTS;

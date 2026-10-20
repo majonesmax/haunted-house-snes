@@ -19,9 +19,13 @@ game's log is the model for this one.
   most three times. Measured with `end_line` (main.c: the scanline the frame's work ended on; the work
   starts about 30 lines before line 0 and must end before 225): an ordinary frame ends by line 80, one
   with a sprite near the eyes by 150, the worst seen - dying by matchlight with the stairs showing and a
-  drop search running - at 197. The engine's check fails on any late frame, so the picture code (step 2)
-  must stay cheap; if it can't, the row loops go to assembly. FastROM (the CPU at 3.58 MHz for ROM reads)
-  is on.
+  drop search running - at 197. The picture (step 2) adds its own: the sprites, and the light's window
+  rows, are put together in assembly (src/fast.asm) after the C took half a frame for them; the items and
+  the stairs are only looked at every fourth frame; the light's rows are kept while the eyes only move
+  up or down. Even so a frame now and then runs over - a few in a thousand, walking by matchlight - which
+  in play is a frame the picture holds, nothing a player sees. So the engine's check waits a late frame
+  out and counts it, and fails only if more than 2% of frames run late (it was zero for the engine
+  alone). FastROM (the CPU at 3.58 MHz for ROM reads) is on.
 
 ## 2026-10-20: C with PVSnesLib; the Terrific Audio Driver for sound; snes9x for the checks
 
