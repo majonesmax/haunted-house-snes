@@ -91,13 +91,14 @@ int main(void)
     Controls controls;
     u16 last_vblank;
     consoleInit();
-    setMode(BG_MODE1, 0);
+    set_up_picture();
     setPaletteColor(0, NIGHT_BLUE);
     setScreenOn();
     power_on();
     ready_flag = READY;
     last_vblank = snes_vblank_count;
     while (1) {
+        draw_frame();         /* first thing in the vertical blank: the picture of the frame just worked out */
         read_controls(&controls);
         game_frame(&controls);
         note_busiest();

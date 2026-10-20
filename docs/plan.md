@@ -62,7 +62,7 @@ lightning switch is a setting on the title, Y the hint, Y + Select the lights-on
 1. **The engine** - done: in C from the spec, the mansion as data; `tests/verify_engine.py` exact on both
    builds, 36,000 frames each, no frame late.
 2. **The picture** - the SNES look: the floors in 16-colour tiles from the nocturne pack (the remaster's
-   scenery code draws them, cut by a tool like the NES game's `make_art.py`); the status band; the match's
+   scenery code draws them, cut by `tools/make_pictures.py`); the status band; the match's
    light as colour math in a window round the eyes, its gradient by HDMA; the moonlight; sprites with soft
    outlines; the ghost on a translucent layer.
 3. **The sound** - the driver in; the orchestra's instruments rendered short and encoded as samples; the

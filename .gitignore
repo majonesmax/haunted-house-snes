@@ -27,3 +27,4 @@ tests/compiler_check/linkfile
 tests/compiler_check/src/*.ps
 tests/compiler_check/src/*.asm
 tests/compiler_check/src/*.obj
+src/art_data.asm

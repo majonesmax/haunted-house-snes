@@ -39,6 +39,10 @@ typedef struct {
 /* main.c */
 u16 scanline_now(void);   /* the scanline the picture is on: how far into the frame the work has got */
 
+/* picture.c */
+void set_up_picture(void);
+void draw_frame(void);
+
 /* player.c */
 void game_frame(const Controls *controls);
 void new_game(void);

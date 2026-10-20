@@ -10,6 +10,7 @@ import subprocess
 import sys
 
 import make_mansion
+import make_pictures
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PVSNESLIB_HOME = os.path.join(ROOT, "tools", "pvsneslib", "pvsneslib")
@@ -27,6 +28,7 @@ def build(shareable: bool = True) -> str:
     folder = output_folder(shareable)
     os.makedirs(folder, exist_ok=True)
     make_mansion.write(folder, shareable)
+    make_pictures.write(folder, shareable)
     environment = {**os.environ, "PVSNESLIB_HOME": PVSNESLIB_HOME, "MANSION_DIR": folder}
     # always from scratch: the two builds share the sources but not the mansion
     subprocess.run(["make", "--no-print-directory", "--always-make"], cwd=ROOT, env=environment,
