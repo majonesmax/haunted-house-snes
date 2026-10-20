@@ -1,7 +1,19 @@
 {
-  "include": ["tools", "tests"],
-  "exclude": ["tools/pvsneslib", "tools/tad"],
-  "extraPaths": ["tools", "../haunted-house", "../haunted-house-nes/tools", "../haunted-house-nes/mansion"],
+  "include": [
+    "tools",
+    "tests"
+  ],
+  "exclude": [
+    "tools/pvsneslib",
+    "tools/tad"
+  ],
+  "extraPaths": [
+    "tools",
+    "../haunted-house",
+    "../haunted-house/tools",
+    "../haunted-house-nes/tools",
+    "../haunted-house-nes/mansion"
+  ],
   "typeCheckingMode": "basic",
   "venvPath": ".",
   "venv": ".venv"

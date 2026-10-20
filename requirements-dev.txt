@@ -2,3 +2,4 @@ numpy
 pillow
 ruff==0.17.1
 pyright==1.1.414
+sounddevice   # only so the remaster's check (tests/verify_engine.py) can be imported

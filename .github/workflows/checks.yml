@@ -1,5 +1,6 @@
-# On every push and pull request: the code rules, then the shareable ROM built with PVSnesLib and booted in
-# the emulator. The tools are fetched at their pinned versions (tools/get_tools.py); nothing of them is
+# On every push and pull request: the code rules, then the shareable ROM built with PVSnesLib, booted in the
+# emulator and checked against the remaster's model frame by frame (a shorter run than the full one, which
+# takes a while). The tools are fetched at their pinned versions (tools/get_tools.py); nothing of them is
 # committed. The faithful build needs the 2600 ROM, so it isn't built here.
 name: Checks
 
@@ -36,6 +37,12 @@ jobs:
       - name: PVSnesLib, the audio driver and the emulator core
         working-directory: haunted-house-snes
         run: python tools/get_tools.py
+      - name: The compiler's weak spots are the known ones
+        working-directory: haunted-house-snes
+        run: python tests/test_compiler.py
       - name: The shareable ROM boots
         working-directory: haunted-house-snes
         run: python tests/test_boot.py
+      - name: The engine, frame by frame against the remaster's model, on the shareable build
+        working-directory: haunted-house-snes
+        run: python tests/verify_engine.py --shareable 1500

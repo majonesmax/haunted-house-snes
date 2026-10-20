@@ -7,8 +7,12 @@ endif
 export ROMNAME := haunted_house
 export ROMTITLE := HAUNTED HOUSE
 export SRCDIR := src
+export FASTROM := 1       # the CPU at its full 3.58 MHz reading the ROM (FastROM), not 2.68 (SlowROM)
 
 include $(PVSNESLIB_HOME)/devkitsnes/snes_rules
+
+# The mansion's tables, generated into build/<kind>/ (tools/make_mansion.py); MANSION_DIR says which.
+CFLAGS += -I$(MANSION_DIR)
 
 .PHONY: all
 all: $(OBJS) $(ROMNAME).sfc

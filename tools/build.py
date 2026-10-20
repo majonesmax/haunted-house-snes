@@ -9,6 +9,8 @@ import shutil
 import subprocess
 import sys
 
+import make_mansion
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PVSNESLIB_HOME = os.path.join(ROOT, "tools", "pvsneslib", "pvsneslib")
 ROM_NAME = "haunted_house"
@@ -22,13 +24,13 @@ def build(shareable: bool = True) -> str:
     """Make the ROM and copy it, with its symbol file, into build/; returns the ROM's path."""
     if not os.path.exists(os.path.join(PVSNESLIB_HOME, "devkitsnes")):
         sys.exit("PVSnesLib is not fetched: python tools/get_tools.py")
-    environment = {**os.environ, "PVSNESLIB_HOME": PVSNESLIB_HOME}
-    if not shareable:
-        environment["FAITHFUL"] = "1"
-    subprocess.run(["make", "--no-print-directory"], cwd=ROOT, env=environment, check=True,
-                   stdout=subprocess.DEVNULL)
     folder = output_folder(shareable)
     os.makedirs(folder, exist_ok=True)
+    make_mansion.write(folder, shareable)
+    environment = {**os.environ, "PVSNESLIB_HOME": PVSNESLIB_HOME, "MANSION_DIR": folder}
+    # always from scratch: the two builds share the sources but not the mansion
+    subprocess.run(["make", "--no-print-directory", "--always-make"], cwd=ROOT, env=environment,
+                   check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     for ending in (".sfc", ".sym"):
         shutil.copy(os.path.join(ROOT, ROM_NAME + ending), os.path.join(folder, ROM_NAME + ending))
     return os.path.join(folder, ROM_NAME + ".sfc")

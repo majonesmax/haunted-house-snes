@@ -36,6 +36,11 @@ The person who owns this code reads it rather than writes it, and is a C program
   comment, never a bare `14`.
 - Short functions, about 40 lines at most, with few branches.
 - Fixed-width types (`u8`, `u16`) from PVSnesLib; no `int` whose size is a guess.
+- **The compiler's weak spots** (816-tcc; `tests/test_compiler.py` proves them, and must keep passing):
+  never write `!x` as an operand of `||`, nor as the first operand of `&&` - `a || !b`, `!a || b` and
+  `!a && !b` compile wrong. Write `x == 0` instead. A lone `if (!x)` and `a && !b` are fine. Function
+  calls and variable-distance shifts are dear: a loop over every scanline or column can't afford them
+  (src/touching.c says how it keeps to a few).
 - Comments say why. Each file starts with a comment saying what it is.
 - Python tools follow the sister repositories' rules (`tools/readability.py`, ruff, pyright, types on every
   signature).

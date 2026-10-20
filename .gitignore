@@ -18,3 +18,12 @@ shots/
 src/*.ps
 src/*.asm
 src/*.obj
+tests/compiler_check/*.sfc
+tests/compiler_check/*.sym
+tests/compiler_check/*.symfull
+tests/compiler_check/*.log
+tests/compiler_check/hdr.asm
+tests/compiler_check/linkfile
+tests/compiler_check/src/*.ps
+tests/compiler_check/src/*.asm
+tests/compiler_check/src/*.obj
