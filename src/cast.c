@@ -344,7 +344,6 @@ void draw_cast(void)
         slot = STAIRS_SLOTS;
         hide_rest(stairs_used);
         stairs_used = slot;
-        oamUpdate();
         return;
     }
     draw_monsters();
@@ -353,7 +352,8 @@ void draw_cast(void)
     } else if (phase == STAIRS_ON_FRAME) {
         draw_stairs();
     }
-    oamUpdate();   /* the table to the SNES (the library's own sprite calls would ask for this themselves) */
+    /* (The table goes to the console at the start of the next blank, by the library's interrupt: a copy
+       asked for now, past the blank, would land mid-picture and scramble entries.) */
 }
 
 void set_up_cast(void)

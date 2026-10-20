@@ -238,7 +238,7 @@ _cast_put_done:
 ; --- light_rows: the light's window rows for this frame ----------------------------------------------
 ; In: light_centre_x (the eyes' middle on the screen), light_first_row, light_row_count (which rows of
 ; the two shapes, light_inner_shape and light_outer_shape - a half-width a row, $FF for no window - this
-; frame's table takes). Out: the rows at light_table + 10, 5 bytes a row: the row's two lines, then
+; frame's table takes). Out: the rows at light_table + light_table_offset + 10, 5 bytes a row: the row's two lines, then
 ; window 1's left and right (the lit disc), window 2's (the dim ring round it); a row with no window is
 ; left 255, right 0 - nothing.
 ; With the eyes well inside the screen (the shapes reach 31 pixels either way) the edges can't fall off
@@ -256,7 +256,7 @@ light_rows:
     lda.w light_first_row
     and #$00FF
     tax                      ; X: the shape row
-    ldy #0                   ; Y: where in the rows
+    ldy.w light_table_offset ; Y: the table being built (there are two), its rows from +10
     sep #$20
     lda.w light_row_count
     sta.w light_rows_left

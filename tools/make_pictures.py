@@ -380,23 +380,37 @@ def sheet_block(tiles: list[bytes], block: int, part: Picture, palette: list[Col
             sheet_tile(tiles, block, sub_x, sub_y, tile_indices(piece[..., :3], piece[..., 3] > 0, palette))
 
 
+def free_place(taken: set[int], wide: int, high: int) -> int:
+    """The first block of the sheet, in reading order, with room for a picture this many blocks across
+    and down. The picture keeps its shape on the sheet - its lower blocks below its upper ones - as the
+    SNES finds them: a block down is 32 tiles on (src/fast.asm, cast_put)."""
+    for row in range(SHEET_BLOCK_ROWS - high + 1):
+        for column in range(SHEET_BLOCKS_ACROSS - wide + 1):
+            first = row * SHEET_BLOCKS_ACROSS + column
+            blocks = {first + block_y * SHEET_BLOCKS_ACROSS + block_x
+                      for block_y in range(high) for block_x in range(wide)}
+            if not blocks & taken:
+                return first
+    raise ValueError("the cast's pictures don't fit the sprite sheet's 128 blocks of 16 x 16")
+
+
 def cast_sheet(look: "looks.FloorLook") -> tuple[bytes, bytes, list[CastPicture]]:
     """The sheet of sprite tiles, the palettes, and where each picture is."""
     pictures = cast_pictures(look)
     palettes, chosen = cast_palettes(pictures)
     tiles = [tile_bytes(BLANK)] * (SHEET_BLOCKS_ACROSS * SHEET_BLOCK_ROWS * 4)
     placed = []
-    block = 0
+    taken: set[int] = set()
     for (name, frame, picture), palette in zip(pictures, chosen):
         wide, high = blocks_of(picture)
+        first = free_place(taken, wide, high)
         for block_y in range(high):
             for block_x in range(wide):
                 part = picture[block_y * BLOCK:(block_y + 1) * BLOCK, block_x * BLOCK:(block_x + 1) * BLOCK]
-                sheet_block(tiles, block + block_y * wide + block_x, part, palettes[palette])
-        placed.append(CastPicture(name, frame, wide, high, palette, block))
-        block += wide * high
-    if block > SHEET_BLOCKS_ACROSS * SHEET_BLOCK_ROWS:
-        raise ValueError(f"the cast needs {block} blocks of 16 x 16; the sheet holds 128")
+                block = first + block_y * SHEET_BLOCKS_ACROSS + block_x
+                sheet_block(tiles, block, part, palettes[palette])
+                taken.add(block)
+        placed.append(CastPicture(name, frame, wide, high, palette, first))
     palette_bytes = bytearray()
     for palette in palettes:
         colours = [0] + [snes_colour(colour) for colour in palette]

@@ -58,19 +58,25 @@ u8 light_half_width;
 u16 light_centre_pair;               /* the centre in both bytes, for the quick loop's 16-bit adds */
 void light_rows(void);
 static void close_table(void);
+static void swap_tables(void);
 static u8 *closed_entry(u8 *table, u8 lines);
 static void send_table(void);
-static u8 rows_centre_x = 0xFF;      /* the rows now in the table are for this centre... */
-static u8 rows_first = 0xFF;         /* ...this first shape row... */
-static u8 rows_count;                /* ...and this many: walking up or down, they serve again */
-static u8 table_closed;              /* the table is all closed entries (no match lit): kept so */
+static u8 rows_centre_x[2];          /* the rows now in each table are for this centre... */
+static u8 rows_first[2];             /* ...this first shape row... */
+static u8 rows_count[2];             /* ...and this many: walking up or down, they serve again */
+static u8 table_closed[2];           /* a table is all closed entries (no match lit): kept so */
 
 /* The HDMA table: two entries of (lines, four edges) for the lines above the light - always two, so the
    rows start at a fixed place for light_rows to write them - then an entry of two lines and four edges
-   for each row of the light, two entries for the lines below, and 0 to end. */
+   for each row of the light, two entries for the lines below, and 0 to end. There are two tables, built
+   in turn: the one built in a frame is sent in the next, when the sprite table drawn with it reaches
+   the console (the library's blank interrupt copies it then), so the light and the eyes keep step. */
 #define ENTRY 5                      /* bytes: a count and four edges */
 #define ROWS_AT (2 * ENTRY)          /* where the light's rows start (light_rows writes them there) */
-u8 light_table[ROWS_AT + LIGHT_ROWS * ENTRY + 2 * ENTRY + 1];
+#define TABLE_SIZE (ROWS_AT + LIGHT_ROWS * ENTRY + 2 * ENTRY + 1)
+u8 light_table[2 * TABLE_SIZE];
+u16 light_table_offset;              /* where the table being built starts (light_rows reads it) */
+static u8 table_index;               /* ...and which it is, 0 or 1 */
 static u8 shown_mask = 0xFF;         /* the colour rules as the registers have them (written on change) */
 static u8 shown_math = 0xFF;
 static u8 shown_where = 0xFF;
@@ -89,8 +95,15 @@ void set_up_light(void)
     shown_red = 0xFF;
     shown_green = 0xFF;
     shown_blue = 0xFF;
+    light_table_offset = 0;
+    table_index = 0;
     close_table();                   /* (the two entries above the light keep these edges: a frame's
                                         table changes only their counts) */
+    swap_tables();
+    close_table();
+    swap_tables();
+    rows_centre_x[0] = rows_centre_x[1] = 0xFF;
+    rows_first[0] = rows_first[1] = 0xFF;
 }
 
 /* --- the colour rules ----------------------------------------------------------------------------- */
@@ -193,22 +206,29 @@ static u8 *closed_lines(u8 *table, u8 lines)
     return closed_entry(table, lines - half);
 }
 
-/* Point the HDMA channel at the table: each frame it sends the edges line by line from the start. */
+/* Point the HDMA channel at the table built last frame: it sends the edges line by line from the start. */
 static void send_table(void)
 {
     REG_DMAP3 = HDMA_FOUR_REGISTERS;
     REG_BBAD3 = WINDOW_REGISTERS;
-    REG_A1T3LH = (u16)light_table;
+    REG_A1T3LH = (u16)light_table + (TABLE_SIZE - light_table_offset);
     REG_A1B3 = BANK_WORK_RAM;
     REG_HDMAEN = HDMA_CHANNELS;
 }
 
-/* No light at all: every line closed. */
+/* No light at all: every line of the table being built closed. */
 static void close_table(void)
 {
-    u8 *table = closed_lines(light_table, SCREEN_LINES);
+    u8 *table = closed_lines(light_table + light_table_offset, SCREEN_LINES);
     *table = 0;
-    table_closed = 1;
+    table_closed[table_index] = 1;
+}
+
+/* The other table next time. */
+static void swap_tables(void)
+{
+    light_table_offset = TABLE_SIZE - light_table_offset;
+    table_index ^= 1;
 }
 
 /* The light's rows on the screen this frame: the eyes' middle is 1.5 pixels a unit across (VIEW_X on),
@@ -225,7 +245,7 @@ static void build_table(void)
     s16 count = LIGHT_ROWS;
     s16 highest = VIEW_Y;                                        /* no light above here... */
     s16 lowest = VIEW_BOTTOM_LINE;                               /* ...or from here down */
-    u8 *table = light_table;
+    u8 *table = light_table + light_table_offset;
     s16 units = (s16)RAM(POS_X) + 4;
     light_centre_x = (u8)(VIEW_X + (((units << 1) + units) >> 1));
     if (RAM(GAME_NUMBER) != 0) {                                 /* games 2-9: the room's limits */
@@ -254,16 +274,17 @@ static void build_table(void)
         close_table();
         return;
     }
-    light_table[0] = (u8)top >> 1;                   /* the two entries above: their counts */
-    light_table[ENTRY] = (u8)top - light_table[0];
+    table[0] = (u8)top >> 1;                         /* the two entries above: their counts */
+    table[ENTRY] = (u8)top - table[0];
     table += ROWS_AT;
-    if (light_centre_x != rows_centre_x || (u8)first != rows_first || (u8)count != rows_count) {
+    if (light_centre_x != rows_centre_x[table_index] || (u8)first != rows_first[table_index]
+            || (u8)count != rows_count[table_index]) {
         light_first_row = (u8)first;
         light_row_count = (u8)count;
         light_rows();
-        rows_centre_x = light_centre_x;
-        rows_first = (u8)first;
-        rows_count = (u8)count;
+        rows_centre_x[table_index] = light_centre_x;
+        rows_first[table_index] = (u8)first;
+        rows_count[table_index] = (u8)count;
     }
     table += (u16)count * ENTRY;
     table = closed_lines(table, (u8)(SCREEN_LINES - top - (count << 1)));
@@ -274,12 +295,13 @@ static void build_table(void)
 void draw_light(void)
 {
     set_colour_rules();
+    send_table();                    /* (every frame: the library's own copies borrow the channel, and
+                                        leave its registers pointing elsewhere) */
     if (RAM(FLAGS) & MATCH_LIT) {
         build_table();
-        table_closed = 0;
-    } else if (table_closed == 0) {
+        table_closed[table_index] = 0;
+    } else if (table_closed[table_index] == 0) {
         close_table();
     }
-    send_table();                    /* every frame: the library's own copies borrow the channel, and
-                                        leave its registers pointing elsewhere */
+    swap_tables();
 }

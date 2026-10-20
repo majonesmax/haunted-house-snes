@@ -37,6 +37,7 @@ static u8 loading_floor = NO_FLOOR; /* ...and the one on its way there, a piece 
 static u8 loading_step;             /* which piece: the tiles, the walls' map, the floor's map, the palettes */
 static u16 loaded;                  /* bytes of the piece copied so far */
 static FloorPictures loading;
+static u16 shown_scroll_y;          /* the layers' scroll for this frame, worked out in the last */
 u16 draw_end_line;                  /* the scanline the picture's drawing ended on (the blank is 225-261) */
 
 void set_up_picture(void)
@@ -58,6 +59,7 @@ void set_up_picture(void)
     setPaletteColor(0, 0);   /* the backdrop: black, the dark beyond the light */
     shown_floor = NO_FLOOR;
     loading_floor = NO_FLOOR;
+    shown_scroll_y = 0;
 }
 
 /* Start bringing a floor's pictures into video memory. The SNES takes them only in the vertical blank,
@@ -118,21 +120,22 @@ static u16 view_top_row(void)
     return (u16)(FLOOR_LINES - 1 - top_line) * UNIT_Y;
 }
 
-/* Each frame, in the vertical blank: the layers scrolled to the view, and the rest of the picture. */
+/* Each frame, in the vertical blank: the layers scrolled to the view, and the rest of the picture. The
+   sprite table drawn in a frame reaches the console at the start of the next blank (the library's blank
+   interrupt copies it), so the scroll and the light wait a frame to go with it. */
 void draw_frame(void)
 {
-    u16 scroll_y;
     if (loading_floor != NO_FLOOR) {
         load_some();
     } else if (RAM(FLOOR) != shown_floor && RAM(FLOOR) < ART_FLOORS) {
         start_loading(RAM(FLOOR));
     }
     send_status();            /* (video memory takes writes only in the blank: those come first) */
-    scroll_y = view_top_row() - VIEW_Y;
-    REG_BG1VOFS = (u8)scroll_y;        /* (each scroll register takes its low byte, then its high) */
-    REG_BG1VOFS = (u8)(scroll_y >> 8);
-    REG_BG2VOFS = (u8)scroll_y;
-    REG_BG2VOFS = (u8)(scroll_y >> 8);
+    REG_BG1VOFS = (u8)shown_scroll_y;  /* (each scroll register takes its low byte, then its high) */
+    REG_BG1VOFS = (u8)(shown_scroll_y >> 8);
+    REG_BG2VOFS = (u8)shown_scroll_y;
+    REG_BG2VOFS = (u8)(shown_scroll_y >> 8);
+    shown_scroll_y = view_top_row() - VIEW_Y;
     draw_light();             /* (its HDMA table is read from the top of the picture: before the cast, */
     draw_cast();              /* whose sprite table goes to the console in the next blank) */
     draw_end_line = scanline_now();

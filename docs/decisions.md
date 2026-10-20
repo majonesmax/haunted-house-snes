@@ -48,6 +48,18 @@ game's log is the model for this one.
   colour rules 3, the band's check 1; the drawing takes about 33 lines with no match lit and 56 with one.
   Still to try if the budget gets tight: the light's rows for every centre precomputed in ROM (46K, split
   across two banks) and moved in with MVN, about 5 lines instead of 14.
+- **The sprite table must reach the console in the blank, and the drawing isn't in it.** The library's
+  `oamUpdate` copies the table at once; called at the end of the drawing, past the blank, the copy landed
+  mid-picture and scrambled entries - a second ghost under the ghost, part of it turning into a bat. The
+  library's blank interrupt already copies the table at the start of every blank (on frames that weren't
+  late), so the call went; and since that copy is of the table drawn in the frame before, the layers'
+  scroll and the light's HDMA table now wait a frame too (two light tables, built in turn), so the eyes
+  and their light keep step with the floor.
+- **A tall picture's lower half must sit below its upper half on the sprite sheet.** The sheet tool
+  numbered a picture's blocks one after another along a row, so the ghost's lower half (and the stairs')
+  sat beside its upper half; the SNES, and cast_put, look a block row down, and drew whatever was there -
+  another ghost frame, or a bat. `free_place` (tools/make_pictures.py) now gives each picture a
+  rectangle of its own shape.
 - **The library borrows HDMA channel 3.** Its own copies (a floor's pieces to video memory, the palettes)
   leave the channel's registers pointing at what they copied; the light's HDMA then wrote palette data
   into the colour memory every line (the eyes went black, the band's gold turned purple) and took CPU
