@@ -47,6 +47,10 @@ void set_up_picture(void)
     bgSetMapPtr(WALLS_LAYER, VRAM_WALLS_MAP, SC_32x64);
     bgSetMapPtr(FLOOR_LAYER, VRAM_FLOOR_MAP, SC_32x64);
     set_up_status();
+    REG_BG1HOFS = (u8)(0 - VIEW_X);    /* the layers start VIEW_X in, for good: a 10-bit scroll */
+    REG_BG1HOFS = (u8)((0 - VIEW_X) >> 8) & 0x03;
+    REG_BG2HOFS = (u8)(0 - VIEW_X);
+    REG_BG2HOFS = (u8)((0 - VIEW_X) >> 8) & 0x03;
     oamInitGfxSet((u8 *)&cast_tiles, (u16)(&cast_tiles_end - &cast_tiles), (u8 *)&cast_palettes,
                   (u16)(&cast_palettes_end - &cast_palettes), 0, VRAM_SPRITES, OBJ_SIZE16_L32);
     set_up_cast();
@@ -125,8 +129,10 @@ void draw_frame(void)
     }
     send_status();            /* (video memory takes writes only in the blank: those come first) */
     scroll_y = view_top_row() - VIEW_Y;
-    bgSetScroll(WALLS_LAYER, (u16)(0 - VIEW_X), scroll_y);
-    bgSetScroll(FLOOR_LAYER, (u16)(0 - VIEW_X), scroll_y);
+    REG_BG1VOFS = (u8)scroll_y;        /* (each scroll register takes its low byte, then its high) */
+    REG_BG1VOFS = (u8)(scroll_y >> 8);
+    REG_BG2VOFS = (u8)scroll_y;
+    REG_BG2VOFS = (u8)(scroll_y >> 8);
     draw_light();             /* (its HDMA table is read from the top of the picture: before the cast, */
     draw_cast();              /* whose sprite table goes to the console in the next blank) */
     draw_end_line = scanline_now();

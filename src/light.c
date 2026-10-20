@@ -57,16 +57,20 @@ u8 light_rows_left;                  /* ...and its working bytes */
 u8 light_half_width;
 u16 light_centre_pair;               /* the centre in both bytes, for the quick loop's 16-bit adds */
 void light_rows(void);
+static void close_table(void);
+static u8 *closed_entry(u8 *table, u8 lines);
+static void send_table(void);
 static u8 rows_centre_x = 0xFF;      /* the rows now in the table are for this centre... */
 static u8 rows_first = 0xFF;         /* ...this first shape row... */
 static u8 rows_count;                /* ...and this many: walking up or down, they serve again */
+static u8 table_closed;              /* the table is all closed entries (no match lit): kept so */
 
 /* The HDMA table: two entries of (lines, four edges) for the lines above the light - always two, so the
-   rows start at a fixed place for light_rows to write them - then (lines | HDMA_REPEAT) and a row's edges for
-   each line of the light, two entries for the lines below, and 0 to end. */
+   rows start at a fixed place for light_rows to write them - then an entry of two lines and four edges
+   for each row of the light, two entries for the lines below, and 0 to end. */
 #define ENTRY 5                      /* bytes: a count and four edges */
-#define ROWS_AT (2 * ENTRY + 1)      /* where the light's rows start (light_rows writes them there) */
-u8 light_table[ROWS_AT + LIGHT_ROWS * 4 + 2 * ENTRY + 1];
+#define ROWS_AT (2 * ENTRY)          /* where the light's rows start (light_rows writes them there) */
+u8 light_table[ROWS_AT + LIGHT_ROWS * ENTRY + 2 * ENTRY + 1];
 static u8 shown_mask = 0xFF;         /* the colour rules as the registers have them (written on change) */
 static u8 shown_math = 0xFF;
 static u8 shown_where = 0xFF;
@@ -85,6 +89,8 @@ void set_up_light(void)
     shown_red = 0xFF;
     shown_green = 0xFF;
     shown_blue = 0xFF;
+    close_table();                   /* (the two entries above the light keep these edges: a frame's
+                                        table changes only their counts) */
 }
 
 /* --- the colour rules ----------------------------------------------------------------------------- */
@@ -187,7 +193,7 @@ static u8 *closed_lines(u8 *table, u8 lines)
     return closed_entry(table, lines - half);
 }
 
-/* Point the HDMA channel at the table: each frame it sends the edges line by line. */
+/* Point the HDMA channel at the table: each frame it sends the edges line by line from the start. */
 static void send_table(void)
 {
     REG_DMAP3 = HDMA_FOUR_REGISTERS;
@@ -197,16 +203,24 @@ static void send_table(void)
     REG_HDMAEN = HDMA_CHANNELS;
 }
 
+/* No light at all: every line closed. */
+static void close_table(void)
+{
+    u8 *table = closed_lines(light_table, SCREEN_LINES);
+    *table = 0;
+    table_closed = 1;
+}
+
 /* The light's rows on the screen this frame: the eyes' middle is 1.5 pixels a unit across (VIEW_X on),
    and the view's lines go down from its top at 2 pixels a line; the disc's middle row is at the eyes'
    middle, a line above their bottom. In games 2-9 nothing is lit above the room's top or below its
-   bottom. */
+   bottom: the rows are cut to the room's limits (to the nearest row of two lines). */
 static void build_table(void)
 {
     u8 view_bottom = (u8)(RAM(POS_Y) - RAM(EYES_LINE));
     s16 eyes_line = (s16)RAM(POS_Y) - view_bottom;              /* the eyes' bottom line in the view */
     s16 centre_y = VIEW_Y + ((VIEW_LINES - eyes_line) << 1) - 2;
-    s16 top = centre_y - LIGHT_MIDDLE_ROW;
+    s16 top = centre_y - LIGHT_MIDDLE_ROW * LIGHT_ROW_LINES;
     s16 first = 0;
     s16 count = LIGHT_ROWS;
     s16 highest = VIEW_Y;                                        /* no light above here... */
@@ -229,30 +243,30 @@ static void build_table(void)
         }
     }
     if (top < highest) {
-        first = highest - top;
+        first = (highest - top + 1) >> 1;
         count -= first;
-        top = highest;
+        top += first << 1;
     }
-    if (top + count > lowest) {
-        count = lowest - top;
+    if (top + (count << 1) > lowest) {
+        count = (lowest - top) >> 1;
     }
     if (count <= 0) {
-        table = closed_lines(table, SCREEN_LINES);
-        *table = 0;
+        close_table();
         return;
     }
-    table = closed_lines(table, (u8)top);
-    *table++ = HDMA_REPEAT | (u8)count;
+    light_table[0] = (u8)top >> 1;                   /* the two entries above: their counts */
+    light_table[ENTRY] = (u8)top - light_table[0];
+    table += ROWS_AT;
     if (light_centre_x != rows_centre_x || (u8)first != rows_first || (u8)count != rows_count) {
         light_first_row = (u8)first;
         light_row_count = (u8)count;
-        light_rows();                                /* (writes the rows at light_table + ROWS_AT) */
+        light_rows();
         rows_centre_x = light_centre_x;
         rows_first = (u8)first;
         rows_count = (u8)count;
     }
-    table += (u16)count << 2;
-    table = closed_lines(table, (u8)(SCREEN_LINES - top - count));
+    table += (u16)count * ENTRY;
+    table = closed_lines(table, (u8)(SCREEN_LINES - top - (count << 1)));
     *table = 0;
 }
 
@@ -262,9 +276,10 @@ void draw_light(void)
     set_colour_rules();
     if (RAM(FLAGS) & MATCH_LIT) {
         build_table();
-    } else {
-        u8 *table = closed_lines(light_table, SCREEN_LINES);
-        *table = 0;
+        table_closed = 0;
+    } else if (table_closed == 0) {
+        close_table();
     }
-    send_table();
+    send_table();                    /* every frame: the library's own copies borrow the channel, and
+                                        leave its registers pointing elsewhere */
 }

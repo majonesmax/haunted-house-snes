@@ -64,8 +64,8 @@
 #define COLOUR_REGISTER 0x21         /* CGADD, then CGDATA: a colour's number, then its two bytes */
 #define BANK_WORK_RAM 0x7E
 #define VIEW_LAYERS 0x17             /* BG1, BG2, BG3 and the sprites */
-#define BAND_LAYERS 0x14             /* BG3 and the sprites */
-#define LOADING_LAYERS 0x14          /* while a floor's pictures arrive: the same, BG1 and BG2 hidden */
+#define BAND_LAYERS 0x04             /* BG3 alone: a sprite at the view's edge stops there */
+#define LOADING_LAYERS 0x14          /* while a floor's pictures arrive: BG3 and the sprites, BG1 and BG2 hidden */
 #define MOST_LINES 127               /* an entry covers at most this many lines */
 #define BACKDROP 0                   /* the backdrop's colour number */
 #define SHADE_ENTRY 4                /* bytes: the colour number twice, then the colour's two bytes */

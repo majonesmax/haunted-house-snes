@@ -38,12 +38,24 @@ game's log is the model for this one.
   the 8K mirrored into bank 0). Anything in work RAM going to video memory by DMA sets the channel's
   registers itself with bank $7E (src/status.c `send_band`, as the HDMA tables do).
 - **The blank is short, and the drawing isn't.** The vertical blank is lines 225-261 and the drawing
-  starts about line 231 after the library's own work; the cast's sprites take 18-40 lines of it and the
-  light's table 6-45 (both C), so the drawing runs on into the picture. That's harmless for the sprite
-  table (the library copies it in the next blank) and the HDMA tables (read line by line), but video
-  memory takes writes only in the blank: the band's DMA, and a floor's pieces, go first. The light goes
-  before the cast, since its table is read from the top of the picture. `draw_end_line` (picture.c) says
-  where the drawing ended.
+  starts about line 231 after the library's own work, so the drawing runs on into the picture. That's
+  harmless for the sprite table (the library copies it in the next blank) and the HDMA tables (read line
+  by line), but video memory takes writes only in the blank: the band's DMA, and a floor's pieces, go
+  first. The light goes before the cast, since its table is read from the top of the picture.
+  `draw_end_line` (picture.c) says where the drawing ended. Measured with probes on the scanline counter:
+  a scanline is only about 230 CPU cycles, so each sprite costs about 4 lines even in assembly
+  (`cast_place` works out its place, `cast_put` writes its entries), the light's 36 rows 14 lines, the
+  colour rules 3, the band's check 1; the drawing takes about 33 lines with no match lit and 56 with one.
+  Still to try if the budget gets tight: the light's rows for every centre precomputed in ROM (46K, split
+  across two banks) and moved in with MVN, about 5 lines instead of 14.
+- **The library borrows HDMA channel 3.** Its own copies (a floor's pieces to video memory, the palettes)
+  leave the channel's registers pointing at what they copied; the light's HDMA then wrote palette data
+  into the colour memory every line (the eyes went black, the band's gold turned purple) and took CPU
+  time doing it. The light points its channel at its table every frame (`send_table`); the band's
+  channels 4 and 5, set once, were left alone.
+- **A `jsr` to a local subroutine inside `cast_place` stopped the ROM dead** (the first frame never
+  finished), with the index registers 16 bits wide; the same instruction serves `light_rows` and
+  `status_key_changed` with them 8 bits wide. Not understood; the two uses were inlined.
 - **A frame is about 59,000 cycles, and this compiler's code spends them fast**: roughly a scanline of
   the 262 for every five statements, a few hundred cycles a call, a loop for every shift by a variable
   amount. The touching pass (src/touching.c) first walked every scanline with several calls each and took

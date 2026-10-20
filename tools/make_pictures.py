@@ -442,32 +442,36 @@ def cast_header_text(placed: list[CastPicture]) -> str:
 # --- the match's light -------------------------------------------------------------------------------
 # The SNES look's light: fully lit within LIGHT_FULL of the light's reach (the 2600 glow: 16 units
 # across, 14 lines up, from the eyes' middle), fading to nothing at LIGHT_GONE. On the SNES, two windows
-# round the eyes - the lit disc and the dim ring round it - as half-widths a scanline, in pixels: 1.5 a
-# unit across, 2 a line up.
+# round the eyes - the lit disc and the dim ring round it - as half-widths a row of two scanlines (the
+# floor's own step: 2 lines a unit), in pixels: 1.5 a unit across.
 LIGHT_FULL, LIGHT_GONE = 0.55, 1.3              # (looks/snes/look.py)
 LIGHT_HALF_WIDTH, LIGHT_HALF_HEIGHT = 16, 14    # (game/visibility.py)
 CLOSED = 0xFF                                   # a row with no window
+ROW_LINES = 2                                   # scanlines a row of the light's table
 
 
 def light_shapes() -> tuple[list[int], list[int]]:
-    """(inner, outer): each row's half-width in pixels, over the outer disc's rows, top to bottom."""
+    """(inner, outer): each row's half-width in pixels, over the outer disc's rows, top to bottom, the
+    row measured at its middle line."""
     outer_x, outer_y = LIGHT_HALF_WIDTH * 1.5 * LIGHT_GONE, LIGHT_HALF_HEIGHT * 2 * LIGHT_GONE
     inner_x, inner_y = LIGHT_HALF_WIDTH * 1.5 * LIGHT_FULL, LIGHT_HALF_HEIGHT * 2 * LIGHT_FULL
-    rows = int(outer_y)
+    lines = int(outer_y)
     inner, outer = [], []
-    for row in range(-rows, rows + 1):
-        outer.append(int(outer_x * (1 - (row / outer_y) ** 2) ** 0.5))
-        inside = abs(row) < inner_y
-        inner.append(int(inner_x * (1 - (row / inner_y) ** 2) ** 0.5) if inside else CLOSED)
+    for line in range(1 - lines, lines, ROW_LINES):
+        middle = line + 0.5
+        outer.append(max(1, int(outer_x * (1 - (middle / outer_y) ** 2) ** 0.5)))   # (never 0: a pair's
+        inside = abs(middle) < inner_y                                                 # bytes need a width)
+        inner.append(int(inner_x * (1 - (middle / inner_y) ** 2) ** 0.5) if inside else CLOSED)
     return inner, outer
 
 
 def light_text() -> str:
     """light.h: the two shapes, and the rows they span."""
     inner, outer = light_shapes()
-    lines = ["/* The match's light: the lit disc and the dim ring, a half-width a scanline (0xFF: none):",
-             "   tools/make_pictures.py. Don't edit. */", "#ifndef LIGHT_H", "#define LIGHT_H",
+    lines = ["/* The match's light: the lit disc and the dim ring, a half-width a row of two scanlines",
+             "   (0xFF: none): tools/make_pictures.py. Don't edit. */", "#ifndef LIGHT_H", "#define LIGHT_H",
              "#include <snes.h>", "", f"#define LIGHT_ROWS {len(outer)}",
+             f"#define LIGHT_ROW_LINES {ROW_LINES}   /* scanlines a row */",
              f"#define LIGHT_MIDDLE_ROW {len(outer) // 2}   /* the row through the eyes' middle */", ""]
     for name, values in (("light_inner_shape", inner), ("light_outer_shape", outer)):
         lines.append(f"const u8 {name}[LIGHT_ROWS] = {{")

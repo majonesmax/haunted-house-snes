@@ -24,8 +24,8 @@
 #define FIRST_LOCKED_GAME 2      /* the master key never shows in games 1-2 */
 #define BLINK_EVERY 200          /* the eyes blink for 6 frames in every 200 */
 #define BLINK_FRAMES 6
-#define HAND_OFFSET 10           /* floor units from the eyes to the hand holding the match... */
-#define HAND_DROP 2              /* ...and below them */
+#define HAND_OFFSET 15           /* pixels from the eyes' middle to the hand holding the match (10 units)... */
+#define HAND_DROP 4              /* ...and below them (2 lines) */
 #define ANIMATION_SHIFT 3        /* a picture's frame lasts 8 frames: the frame count shifted by this */
 #define WALK_MEMORY 8            /* a monster that hasn't moved in this many frames is standing still */
 #define MONSTERS 5
@@ -45,15 +45,32 @@
 #define ITEMS_ON_FRAME 1         /* the items are drawn on frames 1 of 4, the stairs on frames 3 */
 #define STAIRS_ON_FRAME 3
 
-/* What cast_put (src/fast.asm) takes: a picture's place and blocks; it writes the entries from cast_slot. */
+/* What cast_place (src/fast.asm) takes: a picture and where the game has it; it works out its place on the
+   screen, and if it's within the view, cast_put writes its entries from cast_slot. */
 u8 cast_slot;                                /* the next sprite entry to write */
+u8 cast_view_bottom;                         /* the view's bottom line, this frame */
+u8 place_picture;
+u8 place_x;
+u8 place_y;
+u8 place_height;
+u8 place_dx;                                 /* pixels to move the picture by (signed): the hand's */
+u8 place_dy;
+u8 place_mirrored;
+u16 place_centre_x;                          /* cast_place's working words */
+u16 place_centre_y;
+u16 place_top_line;
+u16 place_blocks_high;
+u16 place_blocks_wide;
+u16 place_half_height;
+u16 place_half_width;
+void cast_place(void);
+/* What cast_put takes from cast_place: the picture's top-left and blocks, and the entries' bytes. */
 u8 place_left;
 u8 place_top;
 u8 place_wide;
 u8 place_high;
 u8 place_tile;
 u8 place_attr;
-u8 place_mirrored;
 u8 put_rows_left;                            /* cast_put's own working bytes */
 u8 put_blocks_left;
 u8 put_x;
@@ -73,35 +90,19 @@ static u8 monster_last_y[MONSTERS];
 static u8 hand_side = FACING_RIGHT;          /* the match's hand stays on the side last looked to */
 static u8 blink_clock;                       /* counts the frames to the next blink */
 
-#define TIMES_3_HALVED(value) ((((value) << 1) + (value)) >> 1)
 #define DIFFERENCE(one, other) ((one) > (other) ? (one) - (other) : (other) - (one))
-/* A floor place's middle on the screen: 1.5 pixels a unit across, 2 a line up; the line is the floor's
-   y less the view's bottom line. */
-#define SCREEN_X(x) (VIEW_X + TIMES_3_HALVED((s16)(x) + 4))
-#define SCREEN_Y(y, height) (VIEW_Y + ((VIEW_LINES - ((s16)(y) - (s16)view_bottom)) << 1) - (height))
 
-static u8 view_bottom;                       /* the view's bottom line, this frame */
-
-/* A picture on the screen, its middle at (centre_x, centre_y), mirrored if asked: a sprite entry per
-   16 x 16 block, written by cast_put (src/fast.asm). Nothing is drawn outside the view's lines; nothing
-   ever reaches past the screen's left edge (the floor starts 8 pixels in), so a sprite's x fits a byte.
-   The entry's fourth byte: flips, priority, palette, and the tile number's ninth bit. */
-static void place(u8 picture, s16 centre_x, s16 centre_y, u8 mirrored)
+/* A picture on the screen where the game has it, mirrored if asked: cast_place (src/fast.asm) finds its
+   place - 1.5 pixels a unit across, 2 a line up - and writes a sprite entry per 16 x 16 block, nothing
+   outside the view's lines. */
+static void place(u8 picture, u8 x, u8 y, u8 height, u8 mirrored)
 {
-    u8 high = cast_high[picture];
-    u16 tile = cast_tile[picture];
-    s16 top = centre_y - (high << 3);
-    if (top + (high << 4) <= VIEW_Y || top >= VIEW_Y + VIEW_HEIGHT) {
-        return;
-    }
-    place_wide = cast_wide[picture];
-    place_high = high;
-    place_left = (u8)(centre_x - (place_wide << 3));
-    place_top = (u8)top;
-    place_tile = (u8)tile;
-    place_attr = (u8)((mirrored ? 0x40 : 0) | (IN_FRONT << 4) | (cast_palette[picture] << 1) | (tile >> 8));
+    place_picture = picture;
+    place_x = x;
+    place_y = y;
+    place_height = height;
     place_mirrored = mirrored;
-    cast_put();
+    cast_place();
 }
 
 /* Hide the entries a kind used last time beyond the ones it used now. */
@@ -149,10 +150,8 @@ static void draw_eyes(void)
     u8 x = RAM(POS_X);
     u8 y = RAM(POS_Y);
     u8 stick = RAM(JOYSTICK);
-    s16 centre_x = SCREEN_X(x);
-    s16 centre_y = SCREEN_Y(y, EYES_HEIGHT);
     slot = EYES_SLOTS;
-    place(eyes_picture(), centre_x, centre_y, 0);
+    place(eyes_picture(), x, y, EYES_HEIGHT, 0);
     if (RAM(FLAGS) & MATCH_LIT) {
         u8 left_handed;
         if (stick & STICK_LEFT) {
@@ -161,10 +160,16 @@ static void draw_eyes(void)
             hand_side = FACING_RIGHT;
         }
         left_handed = hand_side == FACING_LEFT;
-        place(CAST_HOOD_RIGHT, centre_x, centre_y, left_handed);
-        place(CAST_MATCH_HAND_RIGHT + animation_frame(CAST_MATCH_HAND_RIGHT_FRAMES),
-              left_handed ? centre_x - TIMES_3_HALVED(HAND_OFFSET) : centre_x + TIMES_3_HALVED(HAND_OFFSET),
-              centre_y + (HAND_DROP << 1), left_handed);
+        place(CAST_HOOD_RIGHT, x, y, EYES_HEIGHT, left_handed);
+        place_dx = HAND_OFFSET;
+        if (left_handed) {
+            place_dx = (u8)(0 - HAND_OFFSET);
+        }
+        place_dy = HAND_DROP;
+        place(CAST_MATCH_HAND_RIGHT + animation_frame(CAST_MATCH_HAND_RIGHT_FRAMES), x, y, EYES_HEIGHT,
+              left_handed);
+        place_dx = 0;
+        place_dy = 0;
     }
     hide_rest(eyes_used);
     eyes_used = slot;
@@ -218,7 +223,7 @@ static void draw_items(void)
             } else {   /* an urn piece's shape, 2-8: 4 frames a shape */
                 picture = CAST_URN2 + ((RAM(URN_SHAPES + item - URN) - 2) << 2) + animation_frame(4);
             }
-            place(picture, SCREEN_X(RAM(ITEM_X + item)), SCREEN_Y(RAM(ITEM_Y + item), ITEM_HEIGHT), 0);
+            place(picture, RAM(ITEM_X + item), RAM(ITEM_Y + item), ITEM_HEIGHT, 0);
         }
     }
     hide_rest(items_used);
@@ -282,8 +287,7 @@ static void draw_monster(u8 monster)
             picture += animation_frame(CAST_TARANTULA2_DOWN_FRAMES);
         }
     }
-    place(picture, SCREEN_X(RAM(MONSTER_X + monster)), SCREEN_Y(RAM(MONSTER_Y + monster), MONSTER_HEIGHT),
-          mirrored);
+    place(picture, RAM(MONSTER_X + monster), RAM(MONSTER_Y + monster), MONSTER_HEIGHT, mirrored);
 }
 
 static void draw_monsters(void)
@@ -317,7 +321,7 @@ static void draw_stairs(void)
     if (lit && here != NO_STAIRS) {
         u8 x = stairs_x[(floor << 2) + (floor << 1) + RAM(ROOM)];   /* (6 a floor) */
         u8 y = stairs_y[(floor << 2) + (here & 3)];                  /* (4 a floor) */
-        place((here & GOES_UP) ? CAST_STAIRS_UP : CAST_STAIRS_DOWN, SCREEN_X(x), SCREEN_Y(y, STAIRS_HEIGHT), 0);
+        place((here & GOES_UP) ? CAST_STAIRS_UP : CAST_STAIRS_DOWN, x, y, STAIRS_HEIGHT, 0);
     }
     hide_rest(stairs_used);
     stairs_used = slot;
@@ -328,7 +332,7 @@ static void draw_stairs(void)
 void draw_cast(void)
 {
     u8 phase = (u8)frame_count & 3;
-    view_bottom = (u8)(RAM(POS_Y) - RAM(EYES_LINE));
+    cast_view_bottom = (u8)(RAM(POS_Y) - RAM(EYES_LINE));
     draw_eyes();
     if (RAM(GAME_STATE) & NO_LOGIC) {   /* select, game over: the eyes only */
         slot = MONSTER_SLOTS;
@@ -354,6 +358,8 @@ void draw_cast(void)
 
 void set_up_cast(void)
 {
+    place_dx = 0;   /* (work RAM starts as anything) */
+    place_dy = 0;
     u16 index;
     oamInit();
     for (index = 512; index < 512 + 32; index++) {   /* every sprite small, and on the screen's left side */

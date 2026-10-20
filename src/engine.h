@@ -46,7 +46,7 @@ extern u8 lights_on;      /* the player's cheat: the whole floor lit, everything
 /* picture.c */
 void set_up_picture(void);
 void draw_frame(void);
-extern u16 draw_end_line;   /* the scanline the last frame's drawing ended on: it must stay in the blank */
+extern extern u16 draw_end_line;   /* the scanline the last frame's drawing ended on: it must stay in the blank */
 
 /* cast.c */
 void set_up_cast(void);

@@ -67,7 +67,7 @@ lightning switch is a setting on the title, Y the hint, Y + Select the lights-on
    outlines; the ghost on a translucent layer. Done so far: the floors on two layers, the cast, the light
    (the lit disc and the dim ring as two windows), the moonlit walls of game 1, the status band on BG3
    over HDMA-painted panels, the lightning's wash, dying's red, the lights-on cheat (the button held,
-   Select). Still to do: the ghost's translucency (it conflicts with the ring's fixed-colour math),
+   Select); the sprites placed and the light's rows built in assembly, two lines a row. Still to do: the ghost's translucency (it conflicts with the ring's fixed-colour math),
    the match's flicker, a dim floor outside the light in game 1 (the look's moon shafts).
 3. **The sound** - the driver in; the orchestra's instruments rendered short and encoded as samples; the
    songs from the pack's `music.json` written out as MML; the twenty effects.
