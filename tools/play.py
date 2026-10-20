@@ -108,6 +108,8 @@ class StateMap:
 
     def draw(self, window: pygame.Surface) -> None:
         floor = self.byte(FLOOR)
+        if floor * 16 + 16 > len(self.walls):   # the ROM is still booting: the state isn't set up yet
+            return
         pygame.draw.rect(window, FLOOR_COLOUR, (MAP_LEFT, 4, 160 * MAP_SCALE, 256 * MAP_SCALE))
         for row in range(16):
             plan = self.walls[floor * 16 + row]
