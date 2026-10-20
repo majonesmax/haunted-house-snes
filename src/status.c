@@ -290,6 +290,7 @@ static u8 *black_entry(u8 *table, u8 lines)
     return table;
 }
 
+void aim_band_channels(void);
 static void set_up_tables(void)
 {
     u8 *table = layers_table;
@@ -307,6 +308,13 @@ static void set_up_tables(void)
     table = black_entry(table, VIEW_LINES - MOST_LINES);
     table = shade_entries(table);
     *table = 0;
+    aim_band_channels();
+}
+
+/* The band's two HDMA channels at their tables: each frame, after any copies (the library's leave the
+   channels aimed at what they copied). */
+void aim_band_channels(void)
+{
     REG_DMAP4 = HDMA_ONE_REGISTER;
     REG_BBAD4 = LAYERS_REGISTER;
     REG_A1T4LH = (u16)layers_table;
@@ -359,6 +367,12 @@ void set_up_status(void)
     band_changed = 1;
 }
 
+/* The band's four palettes to colours 0-15 by DMA (the source is ROM: the library's copy serves). */
+static void send_colours(void)
+{
+    dmaCopyCGram((u8 *)&status_palette, 0, (u16)(&status_palette_end - &status_palette));
+}
+
 /* A band's entries to video memory by DMA (the library's copy takes the bank from a pointer, and a
    pointer to work RAM doesn't carry it). */
 #define DMA_TWO_REGISTERS 1          /* the transfer mode: bytes to two registers in turn */
@@ -377,9 +391,13 @@ static void send_band(u16 *band, u16 address)
     REG_MDMAEN = START_CHANNEL_0;
 }
 
-/* Each frame, in the vertical blank: the bands to video memory, if they've changed. */
+/* Each frame, in the vertical blank: the band's colours, and the bands to video memory if they've changed.
+   (The colours every frame: the backdrop's HDMA leaves the colour address at colour 1, and once, in the
+   first picture after start-up, a stray write we haven't traced landed there. 32 bytes cost a fraction of
+   a scanline, and nothing stray can stay.) */
 void send_status(void)
 {
+    send_colours();
     if (band_changed == 0) {
         return;
     }

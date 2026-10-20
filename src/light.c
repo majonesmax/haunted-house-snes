@@ -60,7 +60,6 @@ void light_rows(void);
 static void close_table(void);
 static void swap_tables(void);
 static u8 *closed_entry(u8 *table, u8 lines);
-static void send_table(void);
 static u8 rows_centre_x[2];          /* the rows now in each table are for this centre... */
 static u8 rows_first[2];             /* ...this first shape row... */
 static u8 rows_count[2];             /* ...and this many: walking up or down, they serve again */
@@ -207,7 +206,7 @@ static u8 *closed_lines(u8 *table, u8 lines)
 }
 
 /* Point the HDMA channel at the table built last frame: it sends the edges line by line from the start. */
-static void send_table(void)
+void aim_light_channel(void)
 {
     REG_DMAP3 = HDMA_FOUR_REGISTERS;
     REG_BBAD3 = WINDOW_REGISTERS;
@@ -295,8 +294,6 @@ static void build_table(void)
 void draw_light(void)
 {
     set_colour_rules();
-    send_table();                    /* (every frame: the library's own copies borrow the channel, and
-                                        leave its registers pointing elsewhere) */
     if (RAM(FLAGS) & MATCH_LIT) {
         build_table();
         table_closed[table_index] = 0;

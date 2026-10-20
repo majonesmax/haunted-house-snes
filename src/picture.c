@@ -29,8 +29,9 @@
 #define FLOOR_LINES 256
 #define NO_FLOOR 0xFF
 
-#define LOAD_CHUNK 4096          /* bytes copied to video memory in one vertical blank: there's time for
-                                    about 6K, less the sprites' own copy */
+#define LOAD_CHUNK 1024          /* bytes copied to video memory at a time: about 6 scanlines */
+#define BLANK_FIRST_LINE 225     /* the vertical blank: video memory takes writes only on these lines... */
+#define LAST_START_LINE 250      /* ...so a piece starts no later than this, to end before line 262 */
 
 static u8 shown_floor = NO_FLOOR;   /* the floor whose pictures are in video memory... */
 static u8 loading_floor = NO_FLOOR; /* ...and the one on its way there, a piece a frame, screen off */
@@ -74,9 +75,17 @@ static void start_loading(u8 floor)
     show_view_layers(0);         /* (not the screen off: that changes the frame's timing underfoot) */
 }
 
-/* One piece of a loading floor, in this vertical blank: at most LOAD_CHUNK bytes of the tiles, then the
-   walls' map, the floor's map and the palettes; the layers show again when all is there. */
-static void load_some(void)
+/* Whether there's time left in this vertical blank for another piece. */
+static u8 blank_left(void)
+{
+    u16 line = scanline_now();
+    return line >= BLANK_FIRST_LINE && line <= LAST_START_LINE;
+}
+
+/* One piece of a loading floor: at most LOAD_CHUNK bytes of the tiles, then the walls' map, the floor's
+   map and the palettes; the layers show again when all is there. A piece copied after the blank would be
+   lost, so the caller checks the time first. */
+static void load_piece(void)
 {
     u8 *source;
     u16 size;
@@ -125,12 +134,15 @@ static u16 view_top_row(void)
    interrupt copies it), so the scroll and the light wait a frame to go with it. */
 void draw_frame(void)
 {
-    if (loading_floor != NO_FLOOR) {
-        load_some();
-    } else if (RAM(FLOOR) != shown_floor && RAM(FLOOR) < ART_FLOORS) {
+    if (loading_floor == NO_FLOOR && RAM(FLOOR) != shown_floor && RAM(FLOOR) < ART_FLOORS) {
         start_loading(RAM(FLOOR));
     }
     send_status();            /* (video memory takes writes only in the blank: those come first) */
+    while (loading_floor != NO_FLOOR && blank_left()) {
+        load_piece();
+    }
+    aim_band_channels();      /* (at once: the library's copies leave the HDMA channels aimed at what */
+    aim_light_channel();      /* they copied, and the picture's first line sets the channels going) */
     REG_BG1VOFS = (u8)shown_scroll_y;  /* (each scroll register takes its low byte, then its high) */
     REG_BG1VOFS = (u8)(shown_scroll_y >> 8);
     REG_BG2VOFS = (u8)shown_scroll_y;

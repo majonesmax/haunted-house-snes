@@ -55,6 +55,7 @@ void draw_cast(void);
 /* light.c */
 void set_up_light(void);
 void draw_light(void);
+void aim_light_channel(void);   /* the light's HDMA channel at its table: each frame, after any copies */
 
 /* status.c */
 void set_up_status(void);
@@ -62,6 +63,7 @@ void compose_status(void);
 void send_status(void);
 void status_floor_shown(u8 floor);
 void show_view_layers(u8 shown);
+void aim_band_channels(void);
 
 /* HDMA, shared by light.c (the windows, channel 3) and status.c (the layers and the backdrop, 4 and 5);
    channel 7 is the library's. The enable register can't be read, so whoever writes it enables all. */

@@ -60,6 +60,19 @@ game's log is the model for this one.
   sat beside its upper half; the SNES, and cast_put, look a block row down, and drew whatever was there -
   another ghost frame, or a bat. `free_place` (tools/make_pictures.py) now gives each picture a
   rectangle of its own shape.
+- **A floor's pictures arrive only in the blank, a small piece at a time.** A floor came in 4K pieces,
+  one a frame from wherever the drawing started; the last could run past the blank, and video memory
+  drops what arrives then. So a few of the old floor's tiles stayed (the Foyer's blue wall edge at the
+  foot of the Gallery's stairs), and the band's new floor name, sent after, was lost. Now the band goes
+  first, and the floor comes in 1K pieces while the scanline counter says there's blank left.
+- **The band's colours are sent every frame.** Once, in the first picture after start-up, a stray write
+  landed on colour 1 (the band's white turned blue). The backdrop's HDMA leaves the colour address at 1
+  after every line, so any stray write to the colour port lands there. Switching channels off in turn
+  pinned it to that channel's presence, and skipping parts of the first frame's work moved it about,
+  but the write itself wasn't found. 32 bytes a frame put the colours right whatever happens.
+- **The engine check's late count depends on where the frame's work ends against the emulator's frame.**
+  A wait for the blank before the first frame shifted that phase for good, and the count went from 0.5%
+  to 2.1% with no more work done. It was taken out; numbers from the check are compared like for like.
 - **The library borrows HDMA channel 3.** Its own copies (a floor's pieces to video memory, the palettes)
   leave the channel's registers pointing at what they copied; the light's HDMA then wrote palette data
   into the colour memory every line (the eyes went black, the band's gold turned purple) and took CPU
