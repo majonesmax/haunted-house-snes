@@ -1,0 +1,41 @@
+# On every push and pull request: the code rules, then the shareable ROM built with PVSnesLib and booted in
+# the emulator. The tools are fetched at their pinned versions (tools/get_tools.py); nothing of them is
+# committed. The faithful build needs the 2600 ROM, so it isn't built here.
+name: Checks
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: haunted-house-snes
+      - uses: actions/checkout@v4   # the remaster: the spec, the models and the look, read at build time
+        with:
+          repository: majonesmax/haunted-house-remastered
+          path: haunted-house
+      - uses: actions/checkout@v4   # the NES game: the mansion
+        with:
+          repository: majonesmax/haunted-house-nes
+          path: haunted-house-nes
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: The Python tools
+        working-directory: haunted-house-snes
+        run: pip install -r requirements-dev.txt
+      - name: The code rules
+        working-directory: haunted-house-snes
+        run: |
+          ruff check --config ruff.toml .
+          python tools/readability.py
+      - name: PVSnesLib, the audio driver and the emulator core
+        working-directory: haunted-house-snes
+        run: python tools/get_tools.py
+      - name: The shareable ROM boots
+        working-directory: haunted-house-snes
+        run: python tests/test_boot.py

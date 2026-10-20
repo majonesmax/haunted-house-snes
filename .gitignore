@@ -8,3 +8,13 @@ __pycache__/
 *.sfc
 *.smc
 shots/
+# make's leavings in the root and beside the C (tools/build.py copies the ROM and symbols into build/)
+/haunted_house.sfc
+/haunted_house.sym
+/haunted_house.symfull
+/haunted_house.log
+/hdr.asm
+/linkfile
+src/*.ps
+src/*.asm
+src/*.obj
