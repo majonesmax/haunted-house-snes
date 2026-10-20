@@ -49,7 +49,8 @@ def copy_floor_pictures(world: str, number: int, style: int) -> None:
         if match and int(match.group(2)) == style:
             ours = f"{match.group(1)}{number}{match.group(3)}.png"
             shutil.copy(os.path.join(NOCTURNE, "world", file), os.path.join(world, ours))
-    shutil.copy(os.path.join(NOCTURNE, "world", f"wall{style}_top.png"), os.path.join(world, f"wall{number}.png"))
+    shutil.copy(os.path.join(NOCTURNE, "world", f"wall{style}_top.png"),
+                os.path.join(world, f"wall{number}.png"))
 
 
 def main() -> None:

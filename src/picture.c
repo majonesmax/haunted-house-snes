@@ -45,6 +45,9 @@ void set_up_picture(void)
     bgSetMapPtr(WALLS_LAYER, VRAM_WALLS_MAP, SC_32x64);
     bgSetMapPtr(FLOOR_LAYER, VRAM_FLOOR_MAP, SC_32x64);
     bgSetDisable(STATUS_LAYER);
+    oamInitGfxSet((u8 *)&cast_tiles, (u16)(&cast_tiles_end - &cast_tiles), (u8 *)&cast_palettes,
+                  (u16)(&cast_palettes_end - &cast_palettes), 0, VRAM_SPRITES, OBJ_SIZE16_L32);
+    set_up_cast();
     shown_floor = NO_FLOOR;
     loading_floor = NO_FLOOR;
 }
@@ -119,4 +122,5 @@ void draw_frame(void)
     scroll_y = view_top_row() - VIEW_Y;
     bgSetScroll(WALLS_LAYER, (u16)(0 - VIEW_X), scroll_y);
     bgSetScroll(FLOOR_LAYER, (u16)(0 - VIEW_X), scroll_y);
+    draw_cast();
 }
