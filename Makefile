@@ -22,3 +22,7 @@ CFLAGS += -Itools/tad/audio-driver/pvsneslib-api
 all: $(OBJS) $(ROMNAME).sfc
 
 clean: cleanBuildRes cleanRom
+
+# Keep the C as compiled (src/*.ps and the optimised src/*.asm) rather than deleting them after the link:
+# they're what to read when a build here and one elsewhere differ.
+.SECONDARY:
