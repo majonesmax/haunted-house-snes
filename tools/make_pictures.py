@@ -850,7 +850,7 @@ def write(kind_folder: str, shareable: bool) -> None:
     for number, (look, name) in enumerate(zip(floor_set, names), start=1):
         art = floor_art(look, number - 1)
         write_floor(folder, number, art)
-        scene = look.scene(number - 1).full[..., :3].astype(np.uint8)   # (as the look drew it: to compare builds)
+        scene = look.scene(number - 1).full[..., :3].astype(np.uint8)   # (as drawn: to compare builds)
         Image.fromarray(scene, "RGB").save(os.path.join(folder, f"floor{number}_scene.png"))
         print(f"  floor {number} {name}: {len(art.tiles) // 32} tiles")
     sheet, palettes, placed = cast_sheet(floor_set[0])
