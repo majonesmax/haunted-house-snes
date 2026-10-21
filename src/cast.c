@@ -24,7 +24,7 @@
 #define FIRST_LOCKED_GAME 2      /* the master key never shows in games 1-2 */
 #define BLINK_EVERY 200          /* the eyes blink for 6 frames in every 200 */
 #define BLINK_FRAMES 6
-#define HAND_OFFSET 15           /* pixels from the eyes' middle to the hand holding the match (10 units)... */
+#define HAND_OFFSET 15           /* pixels from the eyes' middle to the match's hand (10 units)... */
 #define HAND_DROP 4              /* ...and below them (2 lines) */
 #define ANIMATION_SHIFT 3        /* a picture's frame lasts 8 frames: the frame count shifted by this */
 #define WALK_MEMORY 8            /* a monster that hasn't moved in this many frames is standing still */
@@ -95,15 +95,17 @@ static u8 blink_clock;                       /* counts the frames to the next bl
 /* A picture on the screen where the game has it, mirrored if asked: cast_place (src/fast.asm) finds its
    place - 1.5 pixels a unit across, 2 a line up - and writes a sprite entry per 16 x 16 block, nothing
    outside the view's lines. */
-static void place(u8 picture, u8 x, u8 y, u8 height, u8 mirrored)
-{
-    place_picture = picture;
-    place_x = x;
-    place_y = y;
-    place_height = height;
-    place_mirrored = mirrored;
-    cast_place();
-}
+#define place(picture, x, y, height, mirrored) \
+    do { \
+        place_picture = (picture); \
+        place_x = (x); \
+        place_y = (y); \
+        place_height = (height); \
+        place_mirrored = (mirrored); \
+        cast_place(); \
+    } while (0)
+/* (A macro, not a function: a call costs more than a scanline's worth of this compiler's code, and the
+   eyes, the monsters and the rest take one each, every frame.) */
 
 /* Hide the entries a kind used last time beyond the ones it used now. */
 static void hide_rest(u8 used_before)
@@ -115,10 +117,8 @@ static void hide_rest(u8 used_before)
 }
 
 /* The frame of a picture with 1, 2 or 4 frames, 8 game frames each. */
-static u8 animation_frame(u8 frames)
-{
-    return (u8)(frame_count >> ANIMATION_SHIFT) & (frames - 1);
-}
+/* (A macro, as place: a call costs more than its sum.) */
+#define animation_frame(frames) ((u8)(frame_count >> ANIMATION_SHIFT) & ((frames) - 1))
 
 /* --- the eyes, and the hand with the match --- */
 static u8 eyes_picture(void)
@@ -231,15 +231,6 @@ static void draw_items(void)
 }
 
 /* --- the monsters (on the player's floor) --- */
-static u8 monster_visible(u8 monster)
-{
-    u8 room;
-    if (RAM(GAME_NUMBER) == 0 || RAM(DEATH_TIMER) || lights_on) {
-        return 1;
-    }
-    room = RAM(MONSTER_ROOM + monster);
-    return room == RAM(ROOM) || room == RAM(ROOM_BEYOND);
-}
 
 /* Which way a monster faces: the way it last moved. */
 static void watch_facing(u8 monster)
@@ -274,7 +265,8 @@ static void draw_monster(u8 monster)
     u8 mirrored = 0;
     u8 picture;
     if (monster == GHOST) {
-        picture = facing == FACING_UP ? CAST_GHOST_UP : facing == FACING_DOWN ? CAST_GHOST_DOWN : CAST_GHOST_LEFT;
+        picture = facing == FACING_UP ? CAST_GHOST_UP
+                : facing == FACING_DOWN ? CAST_GHOST_DOWN : CAST_GHOST_LEFT;
         picture += animation_frame(CAST_GHOST_DOWN_FRAMES);
         mirrored = facing == FACING_RIGHT;
     } else if (monster == BAT) {
@@ -290,17 +282,22 @@ static void draw_monster(u8 monster)
     place(picture, RAM(MONSTER_X + monster), RAM(MONSTER_Y + monster), MONSTER_HEIGHT, mirrored);
 }
 
+/* The monsters on the player's floor that the original shows (monster_visible's rule, worked out here
+   once for all: a frame in play is full, and a call costs more than a scanline). A monster's facing is
+   watched only while it shows: it's only seen then, and its next step sets it right. */
 static void draw_monsters(void)
 {
     u8 monster;
     u8 last = RAM(LAST_MONSTER);
+    u8 everyone = RAM(GAME_NUMBER) == 0 || RAM(DEATH_TIMER) || lights_on;
     slot = MONSTER_SLOTS;
     for (monster = 0; monster <= last; monster++) {
+        u8 room = RAM(MONSTER_ROOM + monster);
         if (RAM(MONSTER_FLOOR + monster) != RAM(FLOOR)) {
             continue;
         }
-        watch_facing(monster);
-        if (monster_visible(monster)) {
+        if (everyone || room == RAM(ROOM) || room == RAM(ROOM_BEYOND)) {
+            watch_facing(monster);
             draw_monster(monster);
         }
     }

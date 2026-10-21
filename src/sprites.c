@@ -220,7 +220,8 @@ static u8 next_monster(Sprite *sprite)
     return 0;
 }
 
-/* The one item, monster or stairs drawn this frame, and the turn bytes it moves on ($F2B7). height 0: none. */
+/* The one item, monster or stairs drawn this frame, and the turn bytes it moves on ($F2B7).
+   height 0: none. */
 void choose_sprite(Sprite *sprite)
 {
     u8 mode = RAM(GAME_STATE);

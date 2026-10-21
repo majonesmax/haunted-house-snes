@@ -1,6 +1,7 @@
 /* The picture (docs/plan.md, step 2): the floor on two scrolling layers - the walls on one, the floor on
-   the other, in 16-colour tiles the remaster's SNES look drew (tools/make_pictures.py) - with the view where the
-   game's own camera puts it. Everything here only reads the state; nothing here changes the game. */
+   the other, in 16-colour tiles the remaster's SNES look drew (tools/make_pictures.py) - with the view
+   where the game's own camera puts it. Everything here only reads the state; nothing here changes the
+   game. */
 #include <snes.h>
 #include "state.h"
 #include "engine.h"
@@ -36,7 +37,7 @@
 
 static u8 shown_floor;              /* the floor whose pictures are in video memory... */
 static u8 loading_floor;            /* ...and the one on its way there, a piece a frame, screen off */
-static u8 loading_step;             /* which piece: the tiles, the walls' map, the floor's map, the palettes */
+static u8 loading_step;             /* which piece: the tiles, the two layers' maps, the palettes */
 static u16 loaded;                  /* bytes of the piece copied so far */
 static FloorPictures loading;
 static u8 shown_layers;             /* the layers as the HDMA tables have them, and for which screen */

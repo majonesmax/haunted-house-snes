@@ -41,12 +41,12 @@ u16 scanline_now(void);   /* the scanline the picture is on: how far into the fr
 
 /* main.c */
 extern u16 frame_count;   /* frames since the program started: the pictures animate by it */
-extern u8 lights_on;      /* the player's cheat: the whole floor lit, everything on it shown (not the game's) */
+extern u8 lights_on;      /* the player's cheat: the floor lit, everything on it shown (not the game's) */
 
 /* picture.c */
 void set_up_picture(void);
 void draw_frame(void);
-extern extern u16 draw_end_line;   /* the scanline the last frame's drawing ended on: it must stay in the blank */
+extern u16 draw_end_line;   /* the scanline the last frame's drawing ended on */
 
 /* cast.c */
 void set_up_cast(void);
@@ -74,7 +74,16 @@ void screens_frame(void);
 void send_screen_words(void);
 void hide_screen_sprites(void);
 
+/* hints.c */
+void set_up_hints(void);
+void ask_for_hint(void);
+void hints_frame(void);
+void end_note(void);
+extern u16 won_frames;             /* frames into the win at the door (screens.c) */
+
 /* status.c and cast.c, for the screens */
+void status_note(const char *first, const char *second, const char *third);
+void status_note_over(void);
 void status_show_again(void);
 void send_words_map(u8 *source, u16 address, u16 size);
 extern u16 sky_offset;

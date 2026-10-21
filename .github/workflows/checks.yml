@@ -49,3 +49,6 @@ jobs:
       - name: The sound effects fire on the right events
         working-directory: haunted-house-snes
         run: python tests/test_events.py 300
+      - name: The hints say what the remaster's rules say
+        working-directory: haunted-house-snes
+        run: python tests/test_hints.py 300

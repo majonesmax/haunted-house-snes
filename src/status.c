@@ -48,6 +48,7 @@
 /* The band below: the floor's name centred on its first row, the numbers two rows down. */
 #define NAME_ROW 0
 #define NUMBERS_ROW 2
+#define NOTE_ROW 0                   /* a note's three lines: the band below's first three rows */
 #define GAME_LABEL_COLUMN 1
 #define GAME_DIGIT_COLUMN 6
 #define FLOOR_LABEL_COLUMN 24
@@ -67,7 +68,7 @@
 #define BANK_WORK_RAM 0x7E
 #define VIEW_LAYERS 0x17             /* BG1, BG2, BG3 and the sprites */
 #define BAND_LAYERS 0x04             /* BG3 alone: a sprite at the view's edge stops there */
-#define LOADING_LAYERS 0x14          /* while a floor's pictures arrive: BG3 and the sprites, BG1 and BG2 hidden */
+#define LOADING_LAYERS 0x14          /* a floor's pictures on their way: BG3 and the sprites, not BG1, BG2 */
 #define MOST_LINES 127               /* an entry covers at most this many lines */
 #define BACKDROP 0                   /* the backdrop's colour number */
 #define SHADE_ENTRY 4                /* bytes: the colour number twice, then the colour's two bytes */
@@ -91,6 +92,8 @@ static u8 shade_table[2 * (1 + BAND_LINES * SHADE_ENTRY) + 2 * (1 + SHADE_ENTRY)
 static u16 band_above[BAND_ROWS * MAP_COLUMNS];   /* the bands' map entries, as video memory wants them */
 static u16 band_below[BAND_ROWS * MAP_COLUMNS];
 static u8 band_changed;                           /* ...and whether they're yet to be sent */
+static u8 note_showing;                           /* a note (hints.c) is over the band below */
+static u8 floor_named;                            /* the floor whose name the band below shows, or will */
 u8 status_shown_key[KEY_BYTES];                   /* what the band above was last worked out from... */
 u8 status_changed;                                /* ...and whether that differs now (src/fast.asm) */
 void status_key_changed(void);
@@ -239,7 +242,9 @@ void compose_status(void)
     want_held();
     want_urn();
     want_lives();
-    put_digit(band_below, NUMBERS_ROW, GAME_DIGIT_COLUMN, RAM(GAME_NUMBER) + 1, DIM);
+    if (note_showing == 0) {
+        put_digit(band_below, NUMBERS_ROW, GAME_DIGIT_COLUMN, RAM(GAME_NUMBER) + 1, DIM);
+    }
     band_changed = 1;
 }
 
@@ -251,6 +256,10 @@ void status_floor_shown(u8 floor)
     const char *name = floor_names[floor];
     u8 length = 0;
     u8 column;
+    floor_named = floor;
+    if (note_showing) {
+        return;                          /* (put up when the note is done: status_note_over) */
+    }
     for (column = 0; column < MAP_COLUMNS; column++) {
         band_below[(NAME_ROW << 5) + column] = 0;
     }
@@ -263,6 +272,49 @@ void status_floor_shown(u8 floor)
     } else {
         put_tile(band_below, NUMBERS_ROW, FLOOR_DIGIT_COLUMN, font_tiles[BELOW_GROUND - FONT_FIRST_LETTER],
                  DIM);
+    }
+    band_changed = 1;
+}
+
+/* --- notes (hints.c) ------------------------------------------------------------------------------- */
+/* A note in the band below, three lines centred, over the floor's name and numbers until it's done. */
+static void clear_band_below(void)
+{
+    u16 entry;
+    for (entry = 0; entry < BAND_ROWS * MAP_COLUMNS; entry++) {
+        band_below[entry] = 0;
+    }
+}
+
+static void put_centred_line(u8 row, const char *text)
+{
+    u8 length = 0;
+    while (text[length]) {
+        length++;
+    }
+    put_text(band_below, row, (MAP_COLUMNS - length) >> 1, text, WHITE);
+}
+
+void status_note(const char *first, const char *second, const char *third)
+{
+    clear_band_below();
+    put_centred_line(NOTE_ROW, first);
+    put_centred_line(NOTE_ROW + 1, second);
+    put_centred_line(NOTE_ROW + 2, third);
+    note_showing = 1;
+    band_changed = 1;
+}
+
+/* The note's time is up: the floor's name and the numbers again. */
+void status_note_over(void)
+{
+    note_showing = 0;
+    clear_band_below();
+    put_text(band_below, NUMBERS_ROW, GAME_LABEL_COLUMN, "GAME", DIM);
+    put_text(band_below, NUMBERS_ROW, FLOOR_LABEL_COLUMN, "FLOOR", DIM);
+    put_digit(band_below, NUMBERS_ROW, GAME_DIGIT_COLUMN, RAM(GAME_NUMBER) + 1, DIM);
+    if (floor_named < ART_FLOORS) {
+        status_floor_shown(floor_named);
     }
     band_changed = 1;
 }
@@ -391,6 +443,8 @@ void set_up_status(void)
     put_tile(band_above, VALUES_ROW, LIVES_EYES_COLUMN, LIVES_EYES, PIECES);
     put_tile(band_above, VALUES_ROW, LIVES_EYES_COLUMN + 1, LIVES_EYES + 1, PIECES);
     put_text(band_above, VALUES_ROW, LIVES_X_COLUMN, "X", WHITE);
+    note_showing = 0;
+    floor_named = 0xFF;
     put_text(band_below, NUMBERS_ROW, GAME_LABEL_COLUMN, "GAME", DIM);
     put_text(band_below, NUMBERS_ROW, FLOOR_LABEL_COLUMN, "FLOOR", DIM);
     for (entry = 0; entry < KEY_BYTES; entry++) {

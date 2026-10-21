@@ -30,6 +30,8 @@
 #define RULES_ROW 8
 #define RULES_COLUMN 1
 #define HINT_ROW 27
+#define VIEW_FIRST_ROW 4             /* in play: the view's rows of the map (the bands': 0-3, 24-27) */
+#define VIEW_ROWS 20
 #define MATCHES_ROW 7                /* game over: the matches used */
 #define ENDING_GAME_ROW 5            /* the ending: with the urn, the game... */
 #define ENDING_MATCHES_ROW 6         /* ...the matches used... */
@@ -93,9 +95,11 @@ u8 rain_attr;
 u8 rain_hidden;                      /* 1: rain_frame hides the drops instead */
 void rain_frame(void);
 void cast_put(void);
+static void won_frame(void);
+static void put_logo_at(u8 row, const char *text);
 extern u8 cast_slot, place_left, place_top, place_wide, place_high, place_tile, place_attr, place_mirrored;
 
-/* --- the words ------------------------------------------------------------------------------------- */
+/* --- the words --------------------------------------------------------------------------------------- */
 static void clear_text(void)
 {
     u16 entry;
@@ -145,9 +149,9 @@ static u8 put_number(u8 row, u8 column, u8 number, u8 palette)
 }
 
 /* The logo: the font's letters at twice the size, in white with their shadows, over two rows. */
-static void put_logo(const char *text)
+static void put_logo_at(u8 row, const char *text)
 {
-    u16 at = (LOGO_ROW << 5) + ((MAP_COLUMNS - (text_length(text) << 1)) >> 1);
+    u16 at = (row << 5) + ((MAP_COLUMNS - (text_length(text) << 1)) >> 1);
     u16 ink = ((u16)WORDS_WHITE << PALETTE_SHIFT) | PRIORITY;
     while (*text) {
         u8 big = big_letter_tiles[*text - FONT_FIRST_LETTER];
@@ -162,6 +166,11 @@ static void put_logo(const char *text)
         text++;
     }
     screen_words_changed = 1;
+}
+
+static void put_logo(const char *text)
+{
+    put_logo_at(LOGO_ROW, text);
 }
 
 /* The matches used, from the state's two decimal digits in a byte. */
@@ -238,7 +247,8 @@ static void help_words(void)
 {
     u8 line;
     for (line = 0; line < HELP_LINES; line++) {
-        put_text(HELP_ROW + line, HELP_COLUMN, help_lines[line], help_heading[line] ? WORDS_WHITE : WORDS_GREY);
+        u8 palette = help_heading[line] ? WORDS_WHITE : WORDS_GREY;
+        put_text(HELP_ROW + line, HELP_COLUMN, help_lines[line], palette);
     }
     put_centred(HINT_ROW, HELP_HINT, WORDS_GREY);
 }
@@ -283,6 +293,8 @@ static void start_screen(u8 screen)
 {
     screen_shown = screen;
     screen_frames = 0;
+    won_frames = 0;
+    end_note();
     clear_text();
     hide_screen_sprites();
     if (screen == SCREEN_PLAY) {
@@ -317,7 +329,7 @@ static void timed_words(void)
     }
 }
 
-/* --- the sprites --------------------------------------------------------------------------------------- */
+/* --- the sprites ------------------------------------------------------------------------------------- */
 /* A cast picture with its middle at (x, y) on the screen, into the sprite table from cast_slot. */
 static void put_sprite(u8 picture, s16 middle_x, s16 middle_y)
 {
@@ -448,7 +460,22 @@ static void title_lightning(void)
     }
 }
 
-/* --- each frame ---------------------------------------------------------------------------------------- */
+/* --- the win at the door ----------------------------------------------------------------------------- */
+/* Out of the front door with the urn: the game holds the moment, the screen warms towards the light
+   outside (light.c, by won_frames) and the words say so, over the view. */
+#define WON_ROW 6                    /* the view's words: a row of the map in play */
+u16 won_frames;                      /* frames into the win (light.c reads it) */
+static void won_frame(void)
+{
+    if (won_frames == 0) {
+        put_logo_at(WON_ROW, "YOU ESCAPED!");
+    }
+    if (won_frames != 0xFFFF) {
+        won_frames++;
+    }
+}
+
+/* --- each frame -------------------------------------------------------------------------------------- */
 void set_up_screens(void)
 {
     u8 drop;
@@ -462,18 +489,23 @@ void set_up_screens(void)
     rain_attr = (u8)((IN_FRONT << 4) | (cast_palette[CAST_RAIN] << 1) | (cast_tile[CAST_RAIN] >> 8));
     story_state = 0;
     help_open = 0;
+    won_frames = 0;
+    set_up_hints();
     screen_shown = SCREEN_PLAY;
     start_screen(SCREEN_STORY);
 }
 
 /* The buttons the screens have besides the 2600's (main.c, read_controls): any button ends the story
-   (and nothing else, even held: the title comes next); X opens and closes the help on the title. While
-   the story shows, the game hears nothing. Out: 1 if the game is to hear nothing this frame. */
+   (and nothing else, even held: the title comes next); X opens and closes the help on the title, and in
+   play asks for a hint (hints.c). While the story shows, the game hears nothing. Out: 1 if the game is
+   to hear nothing this frame. */
 u8 screen_buttons(u16 pad, u16 pressed)
 {
     if (story_state == STORY_OVER) {
         if ((pressed & KEY_X) && (screen_shown == SCREEN_TITLE || screen_shown == SCREEN_HELP)) {
             help_open ^= 1;
+        } else if ((pressed & KEY_X) && screen_shown == SCREEN_PLAY) {
+            ask_for_hint();
         }
         return 0;
     }
@@ -488,13 +520,23 @@ u8 screen_buttons(u16 pad, u16 pressed)
 /* Each frame, once the game's frame is worked out: the screen for the moment, its words and sprites. */
 void screens_frame(void)
 {
-    u8 wanted = screen_wanted();
+    u8 wanted;
+    if (screen_shown == SCREEN_PLAY && RAM(GAME_STATE) == PLAYING) {   /* (play's usual frame: quickly) */
+        screen_frames++;
+        hints_frame();
+        return;
+    }
+    wanted = screen_wanted();
     if (wanted != screen_shown) {
         start_screen(wanted);
     } else {
         screen_frames++;
     }
     if (screen_shown == SCREEN_PLAY) {
+        hints_frame();
+        if (RAM(GAME_STATE) == WON) {
+            won_frame();
+        }
         return;
     }
     timed_words();
@@ -506,9 +548,15 @@ void screens_frame(void)
    bytes: about 10 lines of the blank). */
 void send_screen_words(void)
 {
+    u16 view_start = VIEW_FIRST_ROW * MAP_COLUMNS;
     if (screen_words_changed == 0) {
         return;
     }
-    send_words_map((u8 *)text_map, VRAM_TEXT_MAP, sizeof text_map);
+    if (screen_shown == SCREEN_PLAY) {        /* in play, the view's rows only: the bands are status.c's */
+        send_words_map((u8 *)(text_map + view_start), VRAM_TEXT_MAP + view_start,
+                       VIEW_ROWS * MAP_COLUMNS * 2);
+    } else {
+        send_words_map((u8 *)text_map, VRAM_TEXT_MAP, sizeof text_map);
+    }
     screen_words_changed = 0;
 }

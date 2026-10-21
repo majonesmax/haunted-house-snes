@@ -22,7 +22,7 @@ import make_sound  # noqa: E402
 
 from game.state import GameState  # noqa: E402
 from music.events import EventWatcher  # noqa: E402
-from game import palette as P  # noqa: E402
+from game import palette as game_palette  # noqa: E402
 
 NO_EFFECT = 0xFF
 FRAMES_PER_GAME = 1500
@@ -34,7 +34,7 @@ class Listening(E.SnesLab):
 
     order = make_sound.effect_order()
     rom = b""
-    palette = P.load()
+    palette = game_palette.load()
 
     def __init__(self, rom_path: str, shareable_build: bool) -> None:
         super().__init__(rom_path, shareable_build)

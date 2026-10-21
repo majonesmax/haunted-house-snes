@@ -79,6 +79,18 @@ game's log is the model for this one.
 
 ## 2026-10-21: the full screens
 
+- **The hints and notes are the NES game's, in C** (src/hints.c, from the remaster's game/hints.py): X
+  asks, the band below shows three lines for six seconds, then the floor's name again. tests/test_hints.py
+  asks during the engine check's play and reads the words back off the band: they must be the remaster's
+  hint() for the same state. The win at the door warms the view by the fixed colour, as the SNES look's
+  lighten, with YOU ESCAPED! in the logo's letters.
+- **Play's frame is full**, so what runs every frame in play is kept cheap: the screens and the notes
+  check a few bytes and do nothing unless something's changed; the sprites' and the animation's small
+  helpers are macros (a call costs more than a scanline on this compiler); a monster's facing is watched
+  only while it shows; the song is chosen every other frame. Late frames: 1.1% (shareable) and 1.4%
+  (faithful), from 2.0% and 1.9%. Most of what's left is the drop search's frames, the engine's heaviest;
+  its wall test in assembly is the next lever if it's ever needed.
+
 - **A screen is a picture set like a floor's** (tools/make_screens.py, through make_pictures.py's tile
   cutting), loaded by the same loader: the title (game select, game over, and the help behind it) and the
   ending. The remaster's SNES look draws them; the moving parts are left out of the picture and done by

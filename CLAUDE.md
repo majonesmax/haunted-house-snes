@@ -21,6 +21,7 @@ python tools/screenshot.py NAME 60 10:start 30   # play some frames, save shots/
 python tests/test_boot.py [--faithful]  # the ROM boots and counts frames
 python tools/make_sound.py                # the sound's samples, effects, songs (tools/make_songs.py) and driver data
 python tests/test_events.py [--faithful] [frames]   # each frame's sound effect is the one the remaster's rules ask for
+python tests/test_hints.py [--faithful] [frames]    # each hint says what the remaster's rules say
 python tests/verify_engine.py [--shareable] [frames] [seed]   # the engine against the remaster's model, frame
                                         # by frame (run it after any change to src/, on both builds)
 python tests/test_compiler.py           # the compiler's wrong condition shapes are the known ones

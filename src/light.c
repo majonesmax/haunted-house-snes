@@ -130,6 +130,21 @@ static void forget_colour_rules(void)
     shown_blue = 0xFF;
 }
 
+/* The win at the door: the screen warms towards the light outside as the game holds the moment (the
+   SNES look's lighten), the fixed colour added to everything, a little more each frame. */
+#define WON_FRAMES 240
+static void won_colour_rules(void)
+{
+    u16 level = won_frames < WON_FRAMES ? won_frames : WON_FRAMES;
+    REG_TMW = MASK_NOTHING;
+    REG_CGWSEL = MATH_WITH_FIXED;
+    REG_CGADSUB = ADD_TO_ALL;
+    REG_COLDATA = FIXED_RED | (u8)(LIGHT_RED * level / WON_FRAMES);
+    REG_COLDATA = FIXED_GREEN | (u8)(LIGHT_GREEN * level / WON_FRAMES);
+    REG_COLDATA = FIXED_BLUE | (u8)(LIGHT_BLUE * level / WON_FRAMES);
+    forget_colour_rules();
+}
+
 static void screen_colour_rules(void)
 {
     u8 math = ADD_TO_SKY;
@@ -284,6 +299,8 @@ static void swap_tables(void)
    bottom: the rows are cut to the room's limits (to the nearest row of two lines). */
 static void build_table(void)
 {
+    u8 below;
+    u8 half;
     u8 view_bottom = (u8)(RAM(POS_Y) - RAM(EYES_LINE));
     s16 eyes_line = (s16)RAM(POS_Y) - view_bottom;              /* the eyes' bottom line in the view */
     s16 centre_y = VIEW_Y + ((VIEW_LINES - eyes_line) << 1) - 2;
@@ -333,9 +350,20 @@ static void build_table(void)
         rows_first[table_index] = (u8)first;
         rows_count[table_index] = (u8)count;
     }
-    table += (u16)count * ENTRY;
-    table = closed_lines(table, (u8)(SCREEN_LINES - top - (count << 1)));
-    *table = 0;
+    table += ((u16)count << 2) + count;              /* (count * ENTRY: five bytes a row) */
+    below = (u8)(SCREEN_LINES - top - (count << 1));
+    half = below >> 1;                               /* the lines below, in two entries (written here, */
+    table[0] = half;                                 /* not by closed_lines: three calls cost more than */
+    table[1] = CLOSED_LEFT;                          /* all these stores) */
+    table[2] = CLOSED_RIGHT;
+    table[3] = CLOSED_LEFT;
+    table[4] = CLOSED_RIGHT;
+    table[ENTRY] = below - half;
+    table[ENTRY + 1] = CLOSED_LEFT;
+    table[ENTRY + 2] = CLOSED_RIGHT;
+    table[ENTRY + 3] = CLOSED_LEFT;
+    table[ENTRY + 4] = CLOSED_RIGHT;
+    table[2 * ENTRY] = 0;
 }
 
 /* Each frame, in the vertical blank. */
@@ -343,6 +371,9 @@ void draw_light(void)
 {
     if (screen_shown != SCREEN_PLAY) {
         screen_colour_rules();
+        lightning_flashing = 0;
+    } else if (RAM(GAME_STATE) == WON) {
+        won_colour_rules();
         lightning_flashing = 0;
     } else {
         set_colour_rules();

@@ -115,7 +115,7 @@ int main(void)
     ready_flag = READY;
     last_vblank = snes_vblank_count;
     while (1) {
-        draw_frame();         /* first thing in the vertical blank: the picture of the frame just worked out */
+        draw_frame();         /* first thing in the vertical blank: the picture of the frame worked out */
         read_controls(&controls);
         game_frame(&controls);
         compose_status();     /* the status band, if what it shows has changed */

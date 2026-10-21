@@ -17,7 +17,7 @@
 #define THUNDER_GAP 90         /* frames: the lightning flickers, but one roll of thunder a strike */
 #define NO_EFFECT 0xFF
 #define TITLE_FLASH_EVERY 330        /* the title's lightning (screens.c)... */
-#define TITLE_THUNDER_DELAY 60       /* ...and its thunder, this many frames after: the storm is some way off */
+#define TITLE_THUNDER_DELAY 60       /* ...and its thunder, this many frames after (the storm's far off) */
 #define CALM_FRAMES 120        /* the tension music keeps on this long after the last monster has gone */
 
 /* What audio_events (src/fast.asm) works with: what the state was last frame (what's changed since is
@@ -100,8 +100,10 @@ static u8 song_wanted(void)
 static void choose_song(void)
 {
     u8 wanted = song_wanted();
-    if (effect_left) {
-        effect_left--;
+    if (effect_left > 2) {           /* (two frames since: this runs every other frame) */
+        effect_left -= 2;
+    } else {
+        effect_left = 0;
     }
     if (wanted == song_playing || effect_left) {
         return;
@@ -126,7 +128,10 @@ static void hear_title_storm(void)
 
 void audio_frame(void)
 {
-    choose_song();
+    if (frame_count & 1) {   /* (every other frame: a frame in play is full, and a song a frame later
+                                 is no song later at all) */
+        choose_song();
+    }
     audio_events();
     hear_title_storm();
     if (audio_effect != NO_EFFECT) {

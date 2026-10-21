@@ -76,9 +76,10 @@ lightning switch is a setting on the title, Y the hint, Y + Select the lights-on
    and the mansion's own, arranged as the remaster's orchestra arranges them (`tools/make_songs.py`), the
    song for the moment chosen as the NES game does. Still to come with step 4: the story's and the
    ending's songs, which belong to those screens.
-4. **The screens** - the story, the title with its rain and fading lightning, the help, game over, the
-   ending at dawn; the hints and notes in play. Done so far: the story, the title, the help, game over,
-   the ending. Still to do: the win at the door, the floor's name on arrival, the hints and notes.
+4. **The screens** - done: the story, the title with its rain and fading lightning, the help, game over,
+   the ending at dawn; the win at the door; the hints (X) and notes in play, in the band below
+   (`tests/test_hints.py`: each hint as the remaster's rules say). The floor's name on arrival is the
+   band's, as in the NES game.
 5. **Release** - README with pictures, `build.yml` (a tag makes the release), the browser page with
    EmulatorJS's snes9x core, v1.0.0.
 
