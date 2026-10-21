@@ -87,7 +87,7 @@ static u8 monster_facing[MONSTERS];
 static u8 monster_still[MONSTERS];           /* frames since it last moved */
 static u8 monster_last_x[MONSTERS];
 static u8 monster_last_y[MONSTERS];
-static u8 hand_side = FACING_RIGHT;          /* the match's hand stays on the side last looked to */
+static u8 hand_side;                         /* the match's hand stays on the side last looked to */
 static u8 blink_clock;                       /* counts the frames to the next blink */
 
 #define DIFFERENCE(one, other) ((one) > (other) ? (one) - (other) : (other) - (one))
@@ -356,8 +356,28 @@ void draw_cast(void)
        asked for now, past the blank, would land mid-picture and scramble entries.) */
 }
 
+/* A full screen is showing (screens.c): every cast entry hidden, and each kind starting afresh after. */
+void hide_cast(void)
+{
+    u8 entry;
+    for (entry = EYES_SLOTS; entry < SLOTS_END; entry++) {
+        oamMemory[(entry << 2) + 1] = HIDDEN_Y;
+    }
+    eyes_used = EYES_SLOTS;
+    monsters_used = MONSTER_SLOTS;
+    items_used = ITEM_SLOTS;
+    stairs_used = STAIRS_SLOTS;
+}
+
+/* Back to play: the cast's entries are drawn again by draw_cast (the screens' are hidden: screens.c). */
+void show_cast_again(void)
+{
+    hide_cast();
+}
+
 void set_up_cast(void)
 {
+    hand_side = FACING_RIGHT;
     place_dx = 0;   /* (work RAM starts as anything) */
     place_dy = 0;
     u16 index;

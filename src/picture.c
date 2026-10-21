@@ -16,6 +16,7 @@
 #define WALLS_LAYER 0            /* BG1: above the floor */
 #define FLOOR_LAYER 1            /* BG2 */
 #define STATUS_LAYER 2           /* BG3: in front of both, where it has anything to show */
+#define WORDS_DOWN 4             /* in play the words sit this far down (status.c) */
 #define FLOOR_PALETTES_AT 16     /* colours: BG palette 1; the band has palette 0 */
 #define FLOOR_PALETTES_SIZE (7 * 16 * 2)
 #define MAP_SIZE (32 * 64 * 2)
@@ -33,11 +34,13 @@
 #define BLANK_FIRST_LINE 225     /* the vertical blank: video memory takes writes only on these lines... */
 #define LAST_START_LINE 250      /* ...so a piece starts no later than this, to end before line 262 */
 
-static u8 shown_floor = NO_FLOOR;   /* the floor whose pictures are in video memory... */
-static u8 loading_floor = NO_FLOOR; /* ...and the one on its way there, a piece a frame, screen off */
+static u8 shown_floor;              /* the floor whose pictures are in video memory... */
+static u8 loading_floor;            /* ...and the one on its way there, a piece a frame, screen off */
 static u8 loading_step;             /* which piece: the tiles, the walls' map, the floor's map, the palettes */
 static u16 loaded;                  /* bytes of the piece copied so far */
 static FloorPictures loading;
+static u8 shown_layers;             /* the layers as the HDMA tables have them, and for which screen */
+static u8 layers_screen;
 static u16 shown_scroll_y;          /* the layers' scroll for this frame, worked out in the last */
 u16 draw_end_line;                  /* the scanline the picture's drawing ended on (the blank is 225-261) */
 
@@ -49,10 +52,6 @@ void set_up_picture(void)
     bgSetMapPtr(WALLS_LAYER, VRAM_WALLS_MAP, SC_32x64);
     bgSetMapPtr(FLOOR_LAYER, VRAM_FLOOR_MAP, SC_32x64);
     set_up_status();
-    REG_BG1HOFS = (u8)(0 - VIEW_X);    /* the layers start VIEW_X in, for good: a 10-bit scroll */
-    REG_BG1HOFS = (u8)((0 - VIEW_X) >> 8) & 0x03;
-    REG_BG2HOFS = (u8)(0 - VIEW_X);
-    REG_BG2HOFS = (u8)((0 - VIEW_X) >> 8) & 0x03;
     oamInitGfxSet((u8 *)&cast_tiles, (u16)(&cast_tiles_end - &cast_tiles), (u8 *)&cast_palettes,
                   (u16)(&cast_palettes_end - &cast_palettes), 0, VRAM_SPRITES, OBJ_SIZE16_L32);
     set_up_cast();
@@ -60,6 +59,8 @@ void set_up_picture(void)
     setPaletteColor(0, 0);   /* the backdrop: black, the dark beyond the light */
     shown_floor = NO_FLOOR;
     loading_floor = NO_FLOOR;
+    shown_layers = 0xFF;
+    layers_screen = 0xFF;
     shown_scroll_y = 0;
 }
 
@@ -115,7 +116,9 @@ static void load_piece(void)
             shown_floor = loading_floor;
             loading_floor = NO_FLOOR;
             show_view_layers(1);
-            status_floor_shown(shown_floor);
+            if (shown_floor < ART_FLOORS) {
+                status_floor_shown(shown_floor);
+            }
         }
     }
 }
@@ -132,23 +135,76 @@ static u16 view_top_row(void)
 /* Each frame, in the vertical blank: the layers scrolled to the view, and the rest of the picture. The
    sprite table drawn in a frame reaches the console at the start of the next blank (the library's blank
    interrupt copies it), so the scroll and the light wait a frame to go with it. */
+/* The picture set this moment wants: the floor's in play; the title's behind the title and game over;
+   the ending's; the story and the help show none (whatever's there stays, hidden). */
+static u8 set_wanted(void)
+{
+    if (screen_shown == SCREEN_TITLE || screen_shown == SCREEN_GAME_OVER) {
+        return ART_TITLE;
+    }
+    if (screen_shown == SCREEN_ENDING) {
+        return ART_ENDING;
+    }
+    return shown_floor;
+}
+
+/* The two picture layers' scroll: in play the view (VIEW_X in, and down to the view's top row, a frame
+   behind to keep step with the sprites); a full screen's picture sits at the map's top-left. */
+static void scroll_layers(void)
+{
+    u16 across = 0;
+    u16 down = 0;
+    if (screen_shown == SCREEN_PLAY) {
+        across = (u16)(0 - VIEW_X);
+        down = shown_scroll_y;
+    }
+    REG_BG1HOFS = (u8)across;          /* (each scroll register takes its low byte, then its high) */
+    REG_BG1HOFS = (u8)(across >> 8) & 0x03;
+    REG_BG2HOFS = (u8)across;
+    REG_BG2HOFS = (u8)(across >> 8) & 0x03;
+    REG_BG1VOFS = (u8)down;
+    REG_BG1VOFS = (u8)(down >> 8);
+    REG_BG2VOFS = (u8)down;
+    REG_BG2VOFS = (u8)(down >> 8);
+    down = 0;                          /* the words: in play a little down, a margin above the band's */
+    if (screen_shown == SCREEN_PLAY) {
+        down = (u16)(0 - WORDS_DOWN);
+    }
+    REG_BG3VOFS = (u8)down;
+    REG_BG3VOFS = (u8)(down >> 8);
+    shown_scroll_y = view_top_row() - VIEW_Y;
+}
+
 void draw_frame(void)
 {
-    if (loading_floor == NO_FLOOR && RAM(FLOOR) != shown_floor && RAM(FLOOR) < ART_FLOORS) {
-        start_loading(RAM(FLOOR));
+    u8 wanted = RAM(FLOOR);   /* (in play the floor's set; a screen's, set_wanted - kept out of play's way:
+                                 a call costs over a scanline on this compiler, and play's frames are full) */
+    u8 layers_shown;
+    if (screen_shown != SCREEN_PLAY) {
+        wanted = set_wanted();
+    }
+    if (loading_floor == NO_FLOOR && wanted != shown_floor && wanted < ART_SETS) {
+        start_loading(wanted);
     }
     send_status();            /* (video memory takes writes only in the blank: those come first) */
+    if (screen_words_changed) {
+        send_screen_words();
+    }
     while (loading_floor != NO_FLOOR && blank_left()) {
         load_piece();
     }
+    layers_shown = loading_floor == NO_FLOOR;
+    if (layers_shown != shown_layers || screen_shown != layers_screen) {
+        show_view_layers(layers_shown);
+        shown_layers = layers_shown;
+        layers_screen = screen_shown;
+    }
     aim_band_channels();      /* (at once: the library's copies leave the HDMA channels aimed at what */
     aim_light_channel();      /* they copied, and the picture's first line sets the channels going) */
-    REG_BG1VOFS = (u8)shown_scroll_y;  /* (each scroll register takes its low byte, then its high) */
-    REG_BG1VOFS = (u8)(shown_scroll_y >> 8);
-    REG_BG2VOFS = (u8)shown_scroll_y;
-    REG_BG2VOFS = (u8)(shown_scroll_y >> 8);
-    shown_scroll_y = view_top_row() - VIEW_Y;
+    scroll_layers();
     draw_light();             /* (its HDMA table is read from the top of the picture: before the cast, */
-    draw_cast();              /* whose sprite table goes to the console in the next blank) */
+    if (screen_shown == SCREEN_PLAY) {   /* whose sprite table goes to the console in the next blank) */
+        draw_cast();
+    }
     draw_end_line = scanline_now();
 }

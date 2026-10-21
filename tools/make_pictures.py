@@ -32,6 +32,7 @@ sys.path.insert(0, os.path.join(NES, "tools"))
 import mansion as M  # noqa: E402
 import rom_image as I  # noqa: E402
 import make_pack  # noqa: E402
+import make_screens  # noqa: E402
 
 import content  # noqa: E402
 import looks  # noqa: E402
@@ -82,6 +83,7 @@ def floor_looks(shareable: bool) -> tuple[list["looks.FloorLook"], list[str]]:
 # palette; so each tile takes the palette that costs it least, where a colour the palette has no room for
 # becomes the palette's nearest, and palettes grow from the tiles that chose them.
 FEWER_COLOURS = 48          # a floor's picture is first brought down to this many (PIL's median cut)
+SCREEN_PICTURE_COLOURS = 48   # a screen's picture is brought down to this many
 NEW_PALETTE_COST = 24       # a tile whose best palette costs more than this a pixel starts a new one
 Colour = tuple[int, int, int]
 TileColours = dict[Colour, int]    # a tile's colours, with how many pixels of each
@@ -280,12 +282,33 @@ def floor_art(look: "looks.FloorLook", floor: int) -> FloorArt:
     tiles = TileSet()
     walls_map = layer_map(picture, walls_drawn, palettes, chosen[:len(walls_tiles)], tiles, priority=1)
     floor_map = layer_map(picture, floor_drawn, palettes, chosen[len(walls_tiles):], tiles, priority=0)
-    palette_bytes = bytearray()
+    return FloorArt(b"".join(tiles.tiles), walls_map, floor_map, palette_bytes(palettes))
+
+
+def palette_bytes(palettes: list[list[Colour]]) -> bytes:
+    """The BG palettes 1-7, each colour 0 see-through then up to 15 colours, as 15-bit BGR."""
+    out = bytearray()
     for palette in palettes + [[]] * (PALETTES - len(palettes)):
         colours = [0] + [snes_colour(colour) for colour in palette]
         colours += [0] * (16 - len(colours))
-        palette_bytes += b"".join(colour.to_bytes(2, "little") for colour in colours)
-    return FloorArt(b"".join(tiles.tiles), walls_map, floor_map, bytes(palette_bytes))
+        out += b"".join(colour.to_bytes(2, "little") for colour in colours)
+    return bytes(out)
+
+
+def screen_art(scene: "make_screens.ScreenScene") -> FloorArt:
+    """A full screen's picture set (tools/make_screens.py): its picture on the first layer, the glow it
+    adds to the sky on the second; one tile set, one set of palettes, as a floor's."""
+    top_drawn, glow_drawn = padded(scene.drawn), padded(scene.glowing)
+    top = padded(np.where(scene.drawn[..., None], scene.picture, 0).astype(np.uint8))
+    glow = padded(np.where(scene.glowing[..., None], scene.glow, 0).astype(np.uint8))
+    top = fit_tiles(quantized(top, SCREEN_PICTURE_COLOURS), top_drawn)   # (the glow has its 15 shades
+    glow = fit_tiles(glow, glow_drawn)                                   # already: one palette's worth)
+    top_tiles, glow_tiles = tile_colours(top, top_drawn), tile_colours(glow, glow_drawn)
+    palettes, chosen = choose_palettes(top_tiles + glow_tiles)
+    tiles = TileSet()
+    top_map = layer_map(top, top_drawn, palettes, chosen[:len(top_tiles)], tiles, priority=1)
+    glow_map = layer_map(glow, glow_drawn, palettes, chosen[len(top_tiles):], tiles, priority=0)
+    return FloorArt(b"".join(tiles.tiles), top_map, glow_map, palette_bytes(palettes))
 
 
 # --- the cast: sprites -------------------------------------------------------------------------------
@@ -337,12 +360,41 @@ def picture_colours(picture: Picture) -> TileColours:
 
 
 def cast_pictures(look: "looks.FloorLook") -> list[tuple[str, int, Picture]]:
-    """(name, frame, the picture in blocks) for every cast picture kept."""
+    """(name, frame, the picture in blocks) for every cast picture kept, and the screens' own."""
     pictures = []
     for name, frames in CAST:
         for frame in frames:
             pictures.append((name, frame, in_blocks(look.adapt(look.pack.cast.must(name)[frame]))))
-    return pictures
+    return pictures + [(name, 0, in_blocks(picture)) for name, picture in screen_sprites(look)]
+
+
+RAIN = (110, 120, 170)           # the SNES look's rain: a streak of 4 pixels slanting a pixel left
+RAIN_STREAK = [(0, 1), (1, 1), (2, 0), (3, 0)]   # (down, across) of each
+ROOM_MARGIN = 1                  # the dark room round the eyes in the tower window
+NEAR_BLACK = (8, 8, 8)           # (a sprite pixel of pure black, 0, came out bright blue: not understood -
+                                 # docs/decisions.md - so the window's dark is one step above it)
+
+
+def solid(height: int, width: int, colour: Colour) -> Picture:
+    picture = np.zeros((height, width, 4), np.uint8)
+    picture[..., :3] = colour
+    picture[..., 3] = 255
+    return picture
+
+
+def screen_sprites(look: "looks.FloorLook") -> list[tuple[str, Picture]]:
+    """The screens' sprites: a raindrop; the dark room behind the eyes in the tower window (the remaster
+    clears it black round them); the window with its light out, for game over."""
+    drop = np.zeros((4, 2, 4), np.uint8)
+    for down, across in RAIN_STREAK:
+        drop[down, across, :3] = RAIN
+        drop[down, across, 3] = 255
+    eyes = look.adapt(look.pack.cast.must("eyes_centre")[0])
+    room = solid(eyes.shape[0] + 2 * ROOM_MARGIN, eyes.shape[1] + 2 * ROOM_MARGIN, NEAR_BLACK)
+    window = look.pack.info.get("title_window", [0, 0, 6, 4])
+    scale = make_screens.nes_look.MANSION_SCALE
+    dark = solid(window[3] * scale, window[2] * scale, NEAR_BLACK)
+    return [("rain", drop), ("window_room", room), ("dark_window", dark)]
 
 
 def cast_palettes(pictures: list[tuple[str, int, Picture]]) -> tuple[list[list[Colour]], list[int]]:
@@ -479,6 +531,29 @@ def light_shapes() -> tuple[list[int], list[int]]:
     return inner, outer
 
 
+CENTRES = 256                  # every place the eyes' middle can be across the screen
+HALF_CENTRES = 128             # the rows for centres 0-127 in one bank, 128-255 in the next
+
+
+def window_edges(centre: int, half: int) -> tuple[int, int]:
+    """A window's left and right edges round a centre, held on the screen (255, 0: no window)."""
+    if half == CLOSED:
+        return 255, 0
+    return max(0, centre - half), min(255, centre + half)
+
+
+def light_row_bytes(first_centre: int) -> bytes:
+    """The light's rows for HALF_CENTRES centres from first_centre, as the HDMA table wants each: its two
+    lines, then the lit disc's edges (window 1) and the dim ring's (window 2). src/fast.asm copies a
+    frame's from here."""
+    inner, outer = light_shapes()
+    out = bytearray()
+    for centre in range(first_centre, first_centre + HALF_CENTRES):
+        for row in range(len(outer)):
+            out += bytes([ROW_LINES, *window_edges(centre, inner[row]), *window_edges(centre, outer[row])])
+    return bytes(out)
+
+
 def light_text() -> str:
     """light.h: the two shapes, and the rows they span."""
     inner, outer = light_shapes()
@@ -492,6 +567,7 @@ def light_text() -> str:
         for start in range(0, len(values), 16):
             lines.append("    " + ", ".join(str(value) for value in values[start:start + 16]) + ",")
         lines.append("};")
+    lines += [f"#define LIGHT_ROW_BYTES {1 + 4}   /* a row in the table: its lines, four edges */"]
     lines += ["", "/* The same as pairs for one 16-bit add each (src/fast.asm, light_rows' quick loop): the",
               "   low byte 256 - w, the high byte w - 1, so adding the centre to both bytes at once gives",
               "   centre - w and centre + w (the low byte's carry makes up the 1). 0xFF00: no window. */",
@@ -525,7 +601,10 @@ SLOT = 16                           # an item slot: 2 x 2 tiles with a grey fram
 FLAME = 3                           # the burning match: a flame this wide at the ember's end
 EMBER_ROWS, FLAME_ROWS = (3, 4), (1, 2, 3, 4, 5, 6)
 SLOT_ITEMS = ["key", "scepter"] + [f"urn{shape}" for shape in range(2, 9)]
-STATUS_TILES = 128                  # the layer's tiles: 1K words of video memory
+STATUS_TILES = 256                  # the layer's tiles: 2K words of video memory
+LOGO_LETTERS = "HAUNTEDOSGMVRYCP!"   # every letter of HAUNTED HOUSE, GAME OVER, YOU ESCAPED!
+BLOOD_INK = 3                       # a word's palette's third colour: the logo's red shadow
+BIG = 2                             # the logo's letters: the font at twice its size
 BAND_LINES = 32                     # each band's height: the gradient's steps
 
 
@@ -611,15 +690,34 @@ def status_tiles(look: "looks.FloorLook") -> tuple[bytes, list[str]]:
     inked = status_ink(cast_picture(look, "eyes_centre"))
     eyes[1:1 + inked.shape[0], 1:1 + inked.shape[1]] = inked
     tiles += picture_tiles(eyes)
+    names.append(f"#define BIG_LETTERS {len(tiles)}   /* the logo's letters, 4 tiles each */")
+    for letter in LOGO_LETTERS:
+        tiles += picture_tiles(big_letter(letter))
     if len(tiles) > STATUS_TILES:
         raise ValueError(f"the status band needs {len(tiles)} tiles; there's room for {STATUS_TILES}")
     tiles += [bytes(16)] * (STATUS_TILES - len(tiles))
     return b"".join(tiles), names
 
 
+def big_letter(letter: str) -> Indices:
+    """A letter of the logo, 16 x 16, as the remaster's NES look draws its logo (draw_logo): the font at
+    twice its size in white, its black shadow two pixels down and right, and a red one under all a pixel
+    right and two down."""
+    glyph = hud.GLYPHS[letter]
+    cell = np.zeros((TILE * BIG, TILE * BIG), np.uint8)
+    for ink, (across, down) in ((BLOOD_INK, (1, 2)), (SHADOW_INK, (2, 2)), (INK, (0, 0))):
+        for row in range(GLYPH_HIGH):
+            for column in range(GLYPH_WIDE):
+                if glyph[row * GLYPH_WIDE + column] == "#":
+                    top, left = row * BIG + down, (column + 1) * BIG + across
+                    cell[top:top + BIG, left:left + BIG] = ink
+    return cell
+
+
 def status_palettes() -> bytes:
-    """Four palettes of four colours (the first of each see-through, and colour 0 the backdrop, black)."""
-    palettes = [[SHADOW] + PIECES_INKS] + [[SHADOW, ink, SHADOW, SHADOW] for ink in WORD_INKS]
+    """Four palettes of four colours (the first of each see-through, and colour 0 the backdrop, black):
+    the pieces', then the words' - the ink, its shadow, and the logo's red."""
+    palettes = [[SHADOW] + PIECES_INKS] + [[SHADOW, ink, SHADOW, nes_look.BLOOD] for ink in WORD_INKS]
     colours = [snes_colour(colour) for palette in palettes for colour in palette]
     return b"".join(colour.to_bytes(2, "little") for colour in colours)
 
@@ -643,17 +741,22 @@ def status_header_text(names: list[str], floor_names: list[str]) -> str:
              "#ifndef STATUS_H", "#define STATUS_H", "#include <snes.h>", ""] + names
     lines += ["", f"#define FONT_FIRST_LETTER '{FONT_FIRST_LETTER}'",
               "/* The font's tile for each letter from FONT_FIRST_LETTER on (0, a space, for letters it",
-              "   hasn't). */", f"const u8 font_tiles[{FONT_LETTERS}] = {{"]
+              "   hasn't). */", f"static const u8 font_tiles[{FONT_LETTERS}] = {{"]
     for start in range(0, FONT_LETTERS, 16):
         lines.append("    " + ", ".join(str(tile) for tile in font[start:start + 16]) + ",")
+    big = [LOGO_LETTERS.index(letter) * 4 + 1 if letter in LOGO_LETTERS else 0 for letter in letters]
+    lines += ["};", "/* The logo's big letters: each's first tile, less BIG_LETTERS, plus 1 (0: none). */",
+              f"static const u8 big_letter_tiles[{FONT_LETTERS}] = {{"]
+    for start in range(0, FONT_LETTERS, 16):
+        lines.append("    " + ", ".join(str(tile) for tile in big[start:start + 16]) + ",")
     lines += ["};", "", f"#define BAND_LINES {BAND_LINES}",
               "/* The panel's colour on each of a band's lines, top to bottom (15-bit BGR). */",
-              f"const u16 band_shades[BAND_LINES] = {{"]
+              f"static const u16 band_shades[BAND_LINES] = {{"]
     shades = band_shades()
     for start in range(0, BAND_LINES, 8):
         lines.append("    " + ", ".join(f"0x{shade:04X}" for shade in shades[start:start + 8]) + ",")
     lines += ["};", "", f"#define NAME_LETTERS {longest + 1}   /* the longest floor's name, and its end */",
-              f"const char floor_names[{len(floor_names)}][NAME_LETTERS] = {{"]
+              f"static const char floor_names[{len(floor_names)}][NAME_LETTERS] = {{"]
     lines += [f'    "{name.upper()}",' for name in floor_names]
     lines += ["};", "", "#endif", ""]
     return "\n".join(lines)
@@ -668,6 +771,7 @@ def write_floor(folder: str, number: int, art: FloorArt) -> None:
 
 
 def asm_text(folder: str, count: int) -> str:
+    """The floors' and screens' picture sets (count in all), the cast's, the band's, the skies."""
     lines = ["; The picture's data, bound into the ROM: tools/make_pictures.py. Don't edit.",
              '.include "hdr.asm"', ""]
     for number in range(1, count + 1):
@@ -685,12 +789,22 @@ def asm_text(folder: str, count: int) -> str:
         path = os.path.join(folder, f"status_{name}.bin")
         lines += [f"status_{name}:", f'.incbin "{path}"', f"status_{name}_end:"]
     lines += [".ends", ""]
+    for name in ("light_rows_low", "light_rows_high"):
+        lines += [f'.section ".{name}" superfree', f"{name}:",
+                  f'.incbin "{os.path.join(folder, name + ".bin")}"', ".ends", ""]
+    lines += ['.section ".sky_tables" superfree']
+    for name in ("title_skies", "ending_sky"):
+        lines += [f"{name}:", f'.incbin "{os.path.join(folder, name + ".bin")}"']
+    lines += [".ends", ""]
     return "\n".join(lines)
 
 
-def header_text(count: int) -> str:
+def header_text(count: int, floors: int) -> str:
+    """art.h: the picture sets (the floors', then the screens'), and picture_set() to find one."""
     lines = ["/* The picture's data: tools/make_pictures.py. Don't edit. */", "#ifndef ART_H",
-             "#define ART_H", "#include <snes.h>", "", f"#define ART_FLOORS {count}", ""]
+             "#define ART_H", "#include <snes.h>", "", f"#define ART_FLOORS {floors}",
+             f"#define ART_TITLE {floors}   /* the screens' sets, after the floors' */",
+             f"#define ART_ENDING {floors + 1}", f"#define ART_SETS {count}", ""]
     for number in range(1, count + 1):
         for name in ("tiles", "walls", "floor", "palette"):
             lines.append(f"extern char floor{number}_{name}, floor{number}_{name}_end;")
@@ -698,7 +812,7 @@ def header_text(count: int) -> str:
     lines.append("extern char status_tiles, status_tiles_end, status_palette, status_palette_end;")
     lines += ["", "typedef struct {", "    u8 *tiles;", "    u16 tiles_size;", "    u8 *walls_map;",
               "    u8 *floor_map;", "    u8 *palettes;", "} FloorPictures;", "",
-              "/* A floor's pictures, by its number 0-4. */",
+              "/* A picture set's pictures: a floor's by its number, or ART_TITLE, ART_ENDING. */",
               "static void floor_art(u8 floor, FloorPictures *art)", "{", "    switch (floor) {"]
     for number in range(1, count + 1):
         lines += [f"    case {number - 1}:", f"        art->tiles = (u8 *)&floor{number}_tiles;",
@@ -709,6 +823,24 @@ def header_text(count: int) -> str:
                   f"        art->palettes = (u8 *)&floor{number}_palette;", "        break;"]
     lines += ["    default:", "        break;", "    }", "}", "", "#endif", ""]
     return "\n".join(lines)
+
+
+def write_screens(folder: str, kind_folder: str, floor_look: "looks.FloorLook", floors: int) -> int:
+    """The screens' picture sets after the floors', their skies, and screens.h; returns how many sets."""
+    look = floor_look
+    if not isinstance(look, make_screens.nes_look.NesLook):
+        raise TypeError("the screens are drawn by the SNES look, an NES look's kin")
+    for number, (name, make) in enumerate(make_screens.SCENES, start=floors + 1):
+        art = screen_art(make(look))
+        write_floor(folder, number, art)
+        print(f"  the {name}: {len(art.tiles) // 32} tiles")
+    skies = (("title_skies", make_screens.title_skies()), ("ending_sky", make_screens.ending_sky()))
+    for name, data in skies:
+        with open(os.path.join(folder, f"{name}.bin"), "wb") as out:
+            out.write(data)
+    with open(os.path.join(kind_folder, "screens.h"), "w") as header:
+        header.write(make_screens.screens_header_text(look))
+    return len(make_screens.SCENES)
 
 
 def write(kind_folder: str, shareable: bool) -> None:
@@ -734,12 +866,16 @@ def write(kind_folder: str, shareable: bool) -> None:
         out.write(status_palettes())
     with open(os.path.join(kind_folder, "status.h"), "w") as header:
         header.write(status_header_text(band_names, names))
+    sets = len(names) + write_screens(folder, kind_folder, floor_set[0], len(names))
     with open(os.path.join(kind_folder, "art.h"), "w") as header:
-        header.write(header_text(len(names)))
+        header.write(header_text(sets, len(names)))
     with open(os.path.join(kind_folder, "light.h"), "w") as header:
         header.write(light_text())
+    for name, first in (("light_rows_low", 0), ("light_rows_high", HALF_CENTRES)):
+        with open(os.path.join(folder, f"{name}.bin"), "wb") as out:
+            out.write(light_row_bytes(first))
     with open(os.path.join(ROOT, "src", "art_data.asm"), "w") as asm:
-        asm.write(asm_text(folder, len(names)))
+        asm.write(asm_text(folder, sets))
 
 
 def main() -> None:

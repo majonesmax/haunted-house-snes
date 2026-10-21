@@ -49,6 +49,7 @@ static void note_busiest(void)
 static void read_controls(Controls *controls)
 {
     u16 pad = padsCurrent(0);
+    u16 pressed = padsDown(0);
     controls->stick = 0;
     if (pad & KEY_RIGHT) {
         controls->stick |= STICK_RIGHT;
@@ -67,9 +68,15 @@ static void read_controls(Controls *controls)
     controls->select = (pad & KEY_SELECT) != 0;
     if (controls->button) {   /* the button held: Select is the cheat's (as the NES game), not the game's */
         controls->select = 0;
-        if (padsDown(0) & KEY_SELECT) {
+        if (pressed & KEY_SELECT) {
             lights_on ^= 1;
         }
+    }
+    if (screen_buttons(pad, pressed)) {   /* (the story showing: the game hears nothing) */
+        controls->stick = 0;
+        controls->button = 0;
+        controls->reset = 0;
+        controls->select = 0;
     }
 }
 
@@ -102,6 +109,7 @@ int main(void)
     set_up_audio();           /* (first: the sound driver starts with interrupts still off) */
     consoleInit();
     set_up_picture();
+    set_up_screens();
     setScreenOn();
     power_on();
     ready_flag = READY;
@@ -111,6 +119,7 @@ int main(void)
         read_controls(&controls);
         game_frame(&controls);
         compose_status();     /* the status band, if what it shows has changed */
+        screens_frame();      /* the full screens: which, their words and sprites */
         audio_frame();        /* the SNES's sound for what just happened */
         frames_done++;
         note_busiest();

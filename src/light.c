@@ -55,7 +55,9 @@ u8 light_first_row;
 u8 light_row_count;
 u8 light_rows_left;                  /* ...and its working bytes */
 u8 light_half_width;
-u16 light_centre_pair;               /* the centre in both bytes, for the quick loop's 16-bit adds */
+u16 light_centre_pair;               /* (unused now the rows are copied) */
+u16 light_copy_from;                 /* light_rows's working words: where in the ROM's rows... */
+u16 light_copy_bytes;                /* ...and how many bytes, less 1 */
 void light_rows(void);
 static void close_table(void);
 static void swap_tables(void);
@@ -76,12 +78,12 @@ static u8 table_closed[2];           /* a table is all closed entries (no match 
 u8 light_table[2 * TABLE_SIZE];
 u16 light_table_offset;              /* where the table being built starts (light_rows reads it) */
 static u8 table_index;               /* ...and which it is, 0 or 1 */
-static u8 shown_mask = 0xFF;         /* the colour rules as the registers have them (written on change) */
-static u8 shown_math = 0xFF;
-static u8 shown_where = 0xFF;
-static u8 shown_red = 0xFF;
-static u8 shown_green = 0xFF;
-static u8 shown_blue = 0xFF;
+static u8 shown_mask;         /* the colour rules as the registers have them (written on change) */
+static u8 shown_math;
+static u8 shown_where;
+static u8 shown_red;
+static u8 shown_green;
+static u8 shown_blue;
 
 void set_up_light(void)
 {
@@ -106,6 +108,50 @@ void set_up_light(void)
 }
 
 /* --- the colour rules ----------------------------------------------------------------------------- */
+/* On the full screens (screens.c): the glow round the moon or the sun, on the second layer, added to the
+   sky alone - the backdrop - by colour math with the sub-screen; and the ending fading in from the light
+   outside the front door, the fixed colour added to everything. The story and the help: none. */
+#define SUB_SCREEN_GLOW 0x02         /* TS: BG2, the glow, on the sub-screen */
+#define MATH_WITH_SUB_SCREEN 0x02    /* CGWSEL: colour math adds the sub-screen, everywhere */
+#define MATH_WITH_FIXED 0x00         /* CGWSEL: ...adds the fixed colour, everywhere */
+#define ADD_TO_SKY 0x20              /* CGADSUB: add, to the backdrop alone */
+#define ADD_TO_ALL 0x3F              /* CGADSUB: add, to every layer and the backdrop */
+#define FADE_FROM_LIGHT 40           /* frames: the ending fades in from the light at the door */
+#define LIGHT_RED 19                 /* the light (the SNES look's DAWN_LIGHT, 60% of it), in 5 bits */
+#define LIGHT_GREEN 16
+#define LIGHT_BLUE 12
+static void forget_colour_rules(void)
+{
+    shown_mask = 0xFF;               /* (play's rules are written afresh when it comes back) */
+    shown_math = 0xFF;
+    shown_where = 0xFF;
+    shown_red = 0xFF;
+    shown_green = 0xFF;
+    shown_blue = 0xFF;
+}
+
+static void screen_colour_rules(void)
+{
+    u8 math = ADD_TO_SKY;
+    u8 where = MATH_WITH_SUB_SCREEN;
+    u8 level = 0;
+    if (screen_shown == SCREEN_STORY || screen_shown == SCREEN_HELP) {
+        math = NO_MATH;
+    } else if (screen_shown == SCREEN_ENDING && screen_frames < FADE_FROM_LIGHT) {
+        level = FADE_FROM_LIGHT - screen_frames;
+        math = ADD_TO_ALL;
+        where = MATH_WITH_FIXED;
+    }
+    REG_TMW = MASK_NOTHING;
+    REG_TS = SUB_SCREEN_GLOW;
+    REG_CGWSEL = where;
+    REG_CGADSUB = math;
+    REG_COLDATA = FIXED_RED | (LIGHT_RED * level / FADE_FROM_LIGHT);
+    REG_COLDATA = FIXED_GREEN | (LIGHT_GREEN * level / FADE_FROM_LIGHT);
+    REG_COLDATA = FIXED_BLUE | (LIGHT_BLUE * level / FADE_FROM_LIGHT);
+    forget_colour_rules();
+}
+
 /* The lightning (the spec's rule, as the NES game's lightning_now): while dying, every fourth frame; else
    while a monster is in the room, on 4 frames in 64; each time on the toss of the random numbers' low
    bit. */
@@ -295,7 +341,12 @@ static void build_table(void)
 /* Each frame, in the vertical blank. */
 void draw_light(void)
 {
-    set_colour_rules();
+    if (screen_shown != SCREEN_PLAY) {
+        screen_colour_rules();
+        lightning_flashing = 0;
+    } else {
+        set_colour_rules();
+    }
     if (RAM(FLAGS) & MATCH_LIT) {
         build_table();
         table_closed[table_index] = 0;

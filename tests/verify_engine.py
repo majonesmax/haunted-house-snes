@@ -33,7 +33,7 @@ sys.path.insert(0, os.path.join(ROOT, "tools"))   # first: this repository's bui
 from build import build, symbols  # noqa: E402
 import shareable  # noqa: E402
 from snes import BUTTON_B, BUTTON_SELECT, BUTTON_START, Snes  # noqa: E402
-from snes import BUTTON_DOWN, BUTTON_LEFT, BUTTON_RIGHT, BUTTON_UP  # noqa: E402
+from snes import BUTTON_DOWN, BUTTON_LEFT, BUTTON_RIGHT, BUTTON_UP, BUTTON_X  # noqa: E402
 import verify_player as V  # noqa: E402
 from lab import BUTTON, JOY_DOWN, JOY_LEFT, JOY_RIGHT, JOY_UP, RESET, SELECT  # noqa: E402
 
@@ -44,6 +44,7 @@ STATE_START = 0x80
 WORK_RAM_BANK = 0x7E0000    # the symbols are 65816 addresses; the core hands out work RAM from 0
 WATCHDOG_SECONDS = 1500     # far past a whole run's time: from then on, every Python thread's stack, often
 RESET_HELD, AFTER_RESET = 5, 5
+STORY_KEY_FRAMES = 2       # past the story at start-up: X held this long, then let go as long
 MOST_LATE_PERCENT = 2.0     # how many frames in a hundred may run late (docs/decisions.md, "The hard parts")
 KEPT_LATE_SCENES = 8        # late frames whose scenes are saved, to measure them
 READY = 0x42                # src/main.c's ready_flag once the console is set up
@@ -74,9 +75,13 @@ class SnesLab:
         return int(self.snes.ram[self.frames_at]) | int(self.snes.ram[self.frames_at + 1]) << 8
 
     def boot(self) -> None:
-        """Run until the ROM says it's set up (it takes a while: the console, then the engine's tables)."""
+        """Run until the ROM says it's set up (it takes a while: the console, then the engine's tables);
+        then past the story, which the game hears nothing through: X, no 2600 control, ends it, and once
+        it's let go the title shows."""
         for _frame in range(BOOT_FRAMES):
             if self.snes.ram[self.ready_at] == READY:
+                self.snes.run(STORY_KEY_FRAMES, {BUTTON_X})
+                self.snes.run(STORY_KEY_FRAMES)
                 return
             self.snes.run(1)
         raise RuntimeError("the ROM never got ready")
@@ -129,9 +134,9 @@ def main() -> None:
     for game in V.GAMES:
         V.check_game(lab, rom, game, frames, seed, tally)  # type: ignore[arg-type]
     V.report(tally)
-    late_rate = 100 * lab.late / lab.frames
-    print(f"frames the SNES finished late: {lab.late} of {lab.frames} ({late_rate:.2f}%; the ROM counted "
-          f"{lab.late_frames()}); allowed: up to {MOST_LATE_PERCENT}%")
+    late_rate = 100 * lab.late_frames() / lab.frames   # the ROM's own count: frames that missed their blank
+    print(f"frames the SNES finished late: {lab.late_frames()} of {lab.frames} ({late_rate:.2f}%, by the "
+          f"ROM's own count; seen from outside, {lab.late}); allowed: up to {MOST_LATE_PERCENT}%")
     for number, (before, held) in enumerate(lab.late_scenes):
         path = os.path.join(ROOT, "build", f"late_scene_{number}.bin")
         with open(path, "wb") as scene:

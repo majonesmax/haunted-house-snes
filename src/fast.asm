@@ -1,7 +1,7 @@
 ; The loops this compiler's code can't afford every frame, in 65816 assembly (docs/decisions.md, "The
 ; hard parts"): placing a cast picture on the screen and putting its sprites into the sprite table,
 ; building the match's light's window rows, checking whether the status band has anything new to show,
-; and hearing what's just happened for the sound effects. Each takes its arguments in C variables (src/cast.c, src/light.c declare them), so there's
+; hearing what's just happened for the sound effects, the title's rain, and aiming HDMA at a sky. Each takes its arguments in C variables (src/cast.c, src/light.c declare them), so there's
 ; no calling convention to get wrong; each keeps every register and flag it touches. The data bank is set
 ; to $7E, work RAM, where the C variables and the sprite table are; ROM tables are read with long
 ; addresses.
@@ -236,120 +236,80 @@ _cast_put_done:
     plp
     rtl
 
-; --- light_rows: the light's window rows for this frame ----------------------------------------------
-; In: light_centre_x (the eyes' middle on the screen), light_first_row, light_row_count (which rows of
-; the two shapes, light_inner_shape and light_outer_shape - a half-width a row, $FF for no window - this
-; frame's table takes). Out: the rows at light_table + light_table_offset + 10, 5 bytes a row: the row's two lines, then
-; window 1's left and right (the lit disc), window 2's (the dim ring round it); a row with no window is
-; left 255, right 0 - nothing.
-; With the eyes well inside the screen (the shapes reach 31 pixels either way) the edges can't fall off
-; it, and the quick loop below does without the checks, a window's two edges in one 16-bit add (light.h
-; says how the pair tables make that work); near an edge, the careful loop holds them in.
+; --- light_rows: the light's window rows for this frame, copied from the ROM ----------------------------
+; In: light_centre_x (the eyes' middle on the screen), light_first_row, light_row_count (which of the 36
+; rows this frame's table takes), light_table_offset (the table being built). Every centre's rows are made
+; in advance (tools/make_pictures.py, light_row_bytes): 36 rows of 5 bytes - the row's two lines, window
+; 1's left and right (the lit disc), window 2's (the dim ring) - centres 0-127 in one bank, 128-255 in the
+; next. This copies the frame's to light_table + light_table_offset + 10 with MVN: about 5 scanlines, where
+; working them out took 15.
 light_rows:
     php
     phb
-    sep #$20
-    rep #$10
-    lda #$7E
-    pha
-    plb
-    rep #$20
-    lda.w light_first_row
+    rep #$30                 ; A, X, Y 16-bit
+    lda.l light_centre_x
+    and #$007F               ; the centre within its bank's half
+    asl
+    asl
+    sta.l light_copy_from    ; centre * 4...
+    asl
+    asl
+    clc
+    adc.l light_copy_from    ; ...* 20...
+    sta.l light_copy_from
+    asl
+    asl
+    asl
+    clc
+    adc.l light_copy_from    ; ...* 180: a centre's rows
+    sta.l light_copy_from
+    lda.l light_first_row
     and #$00FF
-    tax                      ; X: the shape row
-    ldy.w light_table_offset ; Y: the table being built (there are two), its rows from +10
+    sta.l light_copy_bytes
+    asl
+    asl
+    clc
+    adc.l light_copy_bytes   ; first row * 5
+    clc
+    adc.l light_copy_from
+    sta.l light_copy_from    ; where the frame's rows start, from the bank's table's start
+    lda.l light_row_count
+    and #$00FF
+    sta.l light_copy_bytes
+    asl
+    asl
+    clc
+    adc.l light_copy_bytes   ; rows * 5...
+    dec a
+    sta.l light_copy_bytes   ; ...less 1 (MVN's count)
+    lda.l light_table_offset
+    clc
+    adc #(loword(light_table) + 10)
+    tay                      ; Y: to the table's rows
     sep #$20
-    lda.w light_row_count
-    sta.w light_rows_left
-    lda.w light_centre_x
-    sta.w light_centre_pair
-    sta.w light_centre_pair + 1
-    cmp #32
-    bcc _light_careful
-    cmp #224
-    bcs _light_careful
+    lda.l light_centre_x
+    bmi _light_rows_high
     rep #$20
-    txa
-    asl                      ; the pairs are two bytes each
+    lda.l light_copy_from
+    clc
+    adc #loword(light_rows_low)
+    tax                      ; X: from the rows
+    lda.l light_copy_bytes
+    mvn :light_rows_low, $7E
+    plb
+    plp
+    rtl
+_light_rows_high:
+    rep #$20
+    lda.l light_copy_from
+    clc
+    adc #loword(light_rows_high)
     tax
-    sep #$20
-_light_quick_row:
-    lda #2                   ; the row's lines
-    sta.w light_table + 10,y
-    rep #$20                 ; A 16-bit: a window's two edges at once
-    lda.l light_inner_pairs,x
-    cmp #$FF00               ; no window on this row
-    beq _light_quick_no_inner
-    clc
-    adc.w light_centre_pair  ; (the centre in both bytes: left = centre - w, right = centre + w)
-    sta.w light_table + 11,y
-    bra _light_quick_outer
-_light_quick_no_inner:
-    lda #$00FF               ; left 255, right 0
-    sta.w light_table + 11,y
-_light_quick_outer:
-    lda.l light_outer_pairs,x
-    clc
-    adc.w light_centre_pair
-    sta.w light_table + 13,y
-    tya                      ; Y on by a row's five bytes
-    clc
-    adc #5
-    tay
-    sep #$20
-    inx
-    inx                      ; (the pairs are two bytes each)
-    dec.w light_rows_left
-    bne _light_quick_row
+    lda.l light_copy_bytes
+    mvn :light_rows_high, $7E
     plb
     plp
     rtl
-_light_careful:
-    lda #2                   ; the row's lines
-    sta.w light_table + 10,y
-    lda.l light_inner_shape,x
-    jsr _light_window        ; (the two bytes at Y + 11)
-    iny
-    iny
-    lda.l light_outer_shape,x
-    jsr _light_window
-    iny
-    iny
-    iny
-    inx
-    dec.w light_rows_left
-    bne _light_careful
-    plb
-    plp
-    rtl
-
-; A = a shape row's half-width ($FF: no window): the window's left and right into the rows at Y, held
-; within the screen.
-_light_window:
-    cmp #$FF
-    beq _light_window_none
-    sta.w light_half_width
-    lda.w light_centre_x
-    sec
-    sbc.w light_half_width
-    bcs _light_window_left_fits
-    lda #0
-_light_window_left_fits:
-    sta.w light_table + 11,y
-    lda.w light_centre_x
-    clc
-    adc.w light_half_width
-    bcc _light_window_right_fits
-    lda #255
-_light_window_right_fits:
-    sta.w light_table + 12,y
-    rts
-_light_window_none:
-    lda #255
-    sta.w light_table + 11,y
-    lda #0
-    sta.w light_table + 12,y
-    rts
 
 ; --- status_key_changed: whether anything the status band above the view shows has changed ------------
 ; In: the game's state (game_ram, which starts at the 2600's $80: src/state.h's addresses less that). Out: status_changed is 1 if any of the
@@ -736,5 +696,102 @@ _remember:
     inc.w since_thunder
 _remembered:
     rts
+
+; --- rain_frame: the title's rain, a sprite a drop ------------------------------------------------------
+; The SNES look's rain (add_rain): each drop falls rain_fall lines a frame, round the screen's 224, and
+; drifts left rain_drift 256ths of a pixel. In: rain_x (u16, 256ths), rain_y, rain_fall, rain_drift (u16),
+; rain_tile, rain_attr (src/screens.c); rain_hidden: if set, the drops' sprites are hidden and nothing
+; moves. The drops' sprites are entries 40 on.
+.define RAIN_COUNT 70
+.define RAIN_FIRST_ENTRY 40
+.define RAIN_LINES 224
+rain_frame:
+    php
+    phb
+    sep #$20                 ; A 8-bit
+    rep #$10                 ; X, Y 16-bit
+    lda #$7E
+    pha
+    plb
+    ldx #0                   ; X: the drop
+    ldy #(RAIN_FIRST_ENTRY * 4)   ; Y: its sprite entry
+_rain_drop:
+    lda.w rain_hidden
+    bne _rain_hide
+    lda.w rain_y,x
+    clc
+    adc.w rain_fall,x
+    cmp #RAIN_LINES
+    bcc _rain_fits
+    sbc #RAIN_LINES          ; (the carry is set)
+_rain_fits:
+    sta.w rain_y,x
+    sta.w oamMemory + 1,y
+    rep #$20                 ; A 16-bit: the drift, in 256ths
+    txa
+    asl
+    tax                      ; (the 16-bit tables: two bytes a drop)
+    lda.w rain_x,x
+    sec
+    sbc.w rain_drift,x
+    sta.w rain_x,x
+    xba                      ; the whole pixels
+    sep #$20
+    sta.w oamMemory,y
+    rep #$20
+    txa
+    lsr
+    tax
+    sep #$20
+    lda.w rain_tile
+    sta.w oamMemory + 2,y
+    lda.w rain_attr
+    sta.w oamMemory + 3,y
+    bra _rain_next
+_rain_hide:
+    lda #240                 ; below the picture: not drawn
+    sta.w oamMemory + 1,y
+_rain_next:
+    iny
+    iny
+    iny
+    iny
+    inx
+    cpx #RAIN_COUNT
+    bne _rain_drop
+    plb
+    plp
+    rtl
+
+; --- aim_sky: HDMA channel 5 at a sky table in the ROM --------------------------------------------------
+; The backdrop's colour line by line (tools/make_screens.py): the title's sky, sky_offset bytes in (a
+; lightning flash's fading frame), when sky_which is 0; the ending's dawn when it's 1.
+aim_sky:
+    php
+    sep #$20
+    lda #3                   ; DMAP5: two registers, each written twice (CGADD, CGADD, CGDATA, CGDATA)
+    sta.l $004350
+    lda #$21                 ; BBAD5: CGADD
+    sta.l $004351
+    lda.l sky_which
+    bne _aim_ending
+    lda #:title_skies
+    sta.l $004354
+    rep #$20
+    lda #title_skies
+    clc
+    adc.l sky_offset
+    sta.l $004352
+    plp
+    rtl
+_aim_ending:
+    sep #$20                 ; (A is 8-bit here, but the assembler, reading on from the 16-bit code above,
+    lda #:ending_sky         ; would size the next load for 16: said again, it knows)
+    sta.l $004354
+    rep #$20
+    lda #ending_sky
+    sta.l $004352
+    plp
+    rtl
 
 .ends

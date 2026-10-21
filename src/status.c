@@ -13,14 +13,16 @@
 #include "status.h"
 
 #define STATUS_LAYER 2
-#define VRAM_STATUS_TILES 0x1000     /* words: 4-colour tiles, 8 words each; 128 tiles */
-#define VRAM_STATUS_MAP 0x1400       /* 32 x 32 tiles: 1K words */
+#define VRAM_STATUS_TILES 0x1000     /* words: 4-colour tiles, 8 words each; 256 tiles (the font, the
+                                        band's pieces, the logo's big letters) */
+#define VRAM_STATUS_MAP 0x1800       /* 32 x 32 tiles: 1K words (the screens' words too: screens.c) */
 #define MAP_COLUMNS 32
 #define MAP_ROWS 32
 #define BAND_ROWS 4                  /* each band: 4 rows of tiles, 32 lines */
 #define BAND_BELOW_ROW 24            /* the band below the view starts at this row of the map */
 #define LAYER_DOWN 4                 /* the layer is scrolled down this far: a margin above the words */
 #define VIEW_LINES 160               /* between the bands */
+#define SCREEN_LINES 224
 #define PRIORITY 0x2000              /* a map entry's bit: the tile in front of the floor's layers */
 #define PALETTE_SHIFT 10             /* a map entry's palette number is here */
 #define PIECES 0                     /* the palettes: the pieces' inks, and the words' */
@@ -73,6 +75,17 @@
 #define VIEW_LAYERS_FIRST (LAYERS_ENTRY + 1)   /* where the view's two entries keep the layers byte */
 #define VIEW_LAYERS_SECOND (2 * LAYERS_ENTRY + 1)
 static u8 layers_table[4 * LAYERS_ENTRY + 1];
+/* The full screens' (screens.c): one layer setting for all the lines, and a black sky for the story and
+   the help (the title's and the ending's skies are in the ROM: aim_sky, src/fast.asm). */
+#define SCREEN_LAYERS_FIRST 1
+#define SCREEN_LAYERS_SECOND 3
+#define PICTURE_LAYERS 0x15          /* BG1, BG3 and the sprites (BG2, the glow, is on the sub-screen) */
+#define WORDS_LAYERS 0x14            /* BG3 and the sprites: the story, the help, a picture on its way */
+static u8 screen_layers_table[2 * LAYERS_ENTRY + 1];
+static u8 black_sky_table[2 * (1 + SHADE_ENTRY) + 1];
+u8 sky_which;                        /* what aim_sky aims at: 0 the title's sky, 1 the ending's... */
+u16 sky_offset;                      /* ...and how far into the title's (a lightning frame's table) */
+void aim_sky(void);
 static u8 shade_table[2 * (1 + BAND_LINES * SHADE_ENTRY) + 2 * (1 + SHADE_ENTRY) + 1];
 
 static u16 band_above[BAND_ROWS * MAP_COLUMNS];   /* the bands' map entries, as video memory wants them */
@@ -259,11 +272,18 @@ void status_floor_shown(u8 floor)
 void show_view_layers(u8 shown)
 {
     u8 layers = LOADING_LAYERS;
+    u8 screen_layers = WORDS_LAYERS;
     if (shown) {
         layers = VIEW_LAYERS;
+        screen_layers = PICTURE_LAYERS;
     }
     layers_table[VIEW_LAYERS_FIRST] = layers;
     layers_table[VIEW_LAYERS_SECOND] = layers;
+    if (screen_shown == SCREEN_STORY || screen_shown == SCREEN_HELP) {
+        screen_layers = WORDS_LAYERS;    /* (words over the dark) */
+    }
+    screen_layers_table[SCREEN_LAYERS_FIRST] = screen_layers;
+    screen_layers_table[SCREEN_LAYERS_SECOND] = screen_layers;
 }
 
 static u8 *shade_entries(u8 *table)
@@ -308,6 +328,15 @@ static void set_up_tables(void)
     table = black_entry(table, VIEW_LINES - MOST_LINES);
     table = shade_entries(table);
     *table = 0;
+    table = screen_layers_table;
+    *table++ = MOST_LINES;
+    *table++ = WORDS_LAYERS;
+    *table++ = SCREEN_LINES - MOST_LINES;
+    *table++ = WORDS_LAYERS;
+    *table = 0;
+    table = black_entry(black_sky_table, MOST_LINES);
+    table = black_entry(table, SCREEN_LINES - MOST_LINES);
+    *table = 0;
     aim_band_channels();
 }
 
@@ -317,11 +346,16 @@ void aim_band_channels(void)
 {
     REG_DMAP4 = HDMA_ONE_REGISTER;
     REG_BBAD4 = LAYERS_REGISTER;
-    REG_A1T4LH = (u16)layers_table;
+    REG_A1T4LH = (u16)(screen_shown == SCREEN_PLAY ? layers_table : screen_layers_table);
     REG_A1B4 = BANK_WORK_RAM;
+    if (screen_shown == SCREEN_TITLE || screen_shown == SCREEN_GAME_OVER || screen_shown == SCREEN_ENDING) {
+        sky_which = screen_shown == SCREEN_ENDING;
+        aim_sky();
+        return;
+    }
     REG_DMAP5 = HDMA_TWO_REGISTERS_TWICE;
     REG_BBAD5 = COLOUR_REGISTER;
-    REG_A1T5LH = (u16)shade_table;
+    REG_A1T5LH = (u16)(screen_shown == SCREEN_PLAY ? shade_table : black_sky_table);
     REG_A1B5 = BANK_WORK_RAM;
 }
 
@@ -379,16 +413,27 @@ static void send_colours(void)
 #define VRAM_DATA_REGISTER 0x18      /* VMDATAL, then VMDATAH */
 #define VRAM_STEP_AFTER_HIGH 0x80    /* VMAIN: the address steps on after each word */
 #define START_CHANNEL_0 1
-static void send_band(u16 *band, u16 address)
+void send_words_map(u8 *source, u16 address, u16 size)
 {
     REG_VMAIN = VRAM_STEP_AFTER_HIGH;
     REG_VMADDLH = address;
     REG_DMAP0 = DMA_TWO_REGISTERS;
     REG_BBAD0 = VRAM_DATA_REGISTER;
-    REG_A1T0LH = (u16)band;
+    REG_A1T0LH = (u16)source;
     REG_A1B0 = BANK_WORK_RAM;
-    REG_DAS0LH = BAND_ROWS * MAP_COLUMNS * 2;
+    REG_DAS0LH = size;
     REG_MDMAEN = START_CHANNEL_0;
+}
+
+static void send_band(u16 *band, u16 address)
+{
+    send_words_map((u8 *)band, address, BAND_ROWS * MAP_COLUMNS * 2);
+}
+
+/* Back to play from a screen: the bands sent again (the screen's words were over them). */
+void status_show_again(void)
+{
+    band_changed = 1;
 }
 
 /* Each frame, in the vertical blank: the band's colours, and the bands to video memory if they've changed.
@@ -398,7 +443,7 @@ static void send_band(u16 *band, u16 address)
 void send_status(void)
 {
     send_colours();
-    if (band_changed == 0) {
+    if (band_changed == 0 || screen_shown != SCREEN_PLAY) {
         return;
     }
     send_band(band_above, VRAM_STATUS_MAP);

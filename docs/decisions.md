@@ -77,6 +77,45 @@ game's log is the model for this one.
 - **Another name clash**: the NES game's tools/make_music.py was found before this repository's on the
   import path (the picture tool puts the NES tools first), so the song tool is make_songs.py.
 
+## 2026-10-21: the full screens
+
+- **A screen is a picture set like a floor's** (tools/make_screens.py, through make_pictures.py's tile
+  cutting), loaded by the same loader: the title (game select, game over, and the help behind it) and the
+  ending. The remaster's SNES look draws them; the moving parts are left out of the picture and done by
+  the SNES: the eyes in the window, the walk at dawn and the rain are sprites, the words are on the third
+  layer, the logo's letters are the font at twice its size with their red shadow.
+- **The sky is the backdrop, set line by line by HDMA** from tables in the ROM, so it's as smooth as the
+  remaster's gradient; the title's lightning is 14 more tables, each frame of the flash's fade already
+  brightened, so a flash costs nothing. The glow round the moon (or the sun) is the second layer, on the
+  sub-screen, added to the backdrop alone by colour math: it lights only the sky, as the remaster's does.
+  A glow is one tint at 15 strengths, one palette: with the glow's shades spread over the picture's
+  palettes it came out as blocks.
+- **The remaster draws 240 lines; the SNES shows 224**: 8 come off the top (sky) and 8 off the bottom
+  (hill), which keeps the logo, the key hints and the walk at dawn on the screen.
+- **The story swallows every button** until one is pressed and let go (the NES game's way); the engine
+  check presses X, no 2600 control, past it. X opens the help on the title.
+- **Three traps on the way**: (1) WLA-DX sizes an instruction by the last REP/SEP it read, not by how the
+  code gets there - aim_sky's ending branch, after the title's 16-bit code, had its first load sized for
+  16 bits while the CPU arrived in 8, and the misread instructions wrecked the stack (the main loop
+  stopped at the ending); every branch label in src/fast.asm was checked for the same. (2) Variables with
+  starting values went to the second work-RAM bank and were listed twice in the symbols; the screen's
+  number seemed to change by itself, so no variable has a starting value now - they're set in set-up
+  code. (3) A sprite pixel of pure black came out bright blue (0x7E00) though colour memory read back
+  black; one step above black draws right. Not understood; the window's dark sprites use (8, 8, 8).
+
+## 2026-10-21: late frames are the ROM's own count
+
+- **The engine check now judges late frames by the ROM's count**, not by what it sees from outside. The
+  ROM counts a frame late when its work missed the blank (the picture held for a frame): what a player
+  would notice. From outside, the check counted a frame late when the game's frame counter hadn't moved
+  by the end of one emulator frame, which also depends on where the emulator's frame ends against the
+  game's work. The two agreed until step 4 made the work end later in the picture; then the outside
+  count ran to nearly twice the ROM's. Both are printed.
+- **The match's light's rows are copied from the ROM**, made in advance for every place across the
+  screen (36 rows of 5 bytes, 46K in two banks), with the 65816's block move: about 5 scanlines a frame
+  where working them out took 15. The screens had added about 8 lines to every play frame, and the
+  bot's heaviest frames were already at the limit.
+
 ## The hard parts
 
 - **The compiler is wrong about some conditions.** 816-tcc compiles `a || !b || c`, `!a || b` and

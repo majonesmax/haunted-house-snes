@@ -58,6 +58,29 @@ void draw_light(void);
 void aim_light_channel(void);
 extern u8 lightning_flashing;   /* the original's lightning: its walls flash this frame */
 
+/* screens.c */
+#define SCREEN_PLAY 0                /* screen_shown: play, or a full screen */
+#define SCREEN_TITLE 1
+#define SCREEN_GAME_OVER 2
+#define SCREEN_ENDING 3
+#define SCREEN_HELP 4
+#define SCREEN_STORY 5
+extern u8 screen_shown;
+extern u16 screen_frames;
+extern u8 screen_words_changed;   /* the screen's words are yet to be sent */
+void set_up_screens(void);
+u8 screen_buttons(u16 pad, u16 pressed);
+void screens_frame(void);
+void send_screen_words(void);
+void hide_screen_sprites(void);
+
+/* status.c and cast.c, for the screens */
+void status_show_again(void);
+void send_words_map(u8 *source, u16 address, u16 size);
+extern u16 sky_offset;
+void hide_cast(void);
+void show_cast_again(void);
+
 /* audio.c */
 void set_up_audio(void);
 void audio_frame(void);   /* the light's HDMA channel at its table: each frame, after any copies */

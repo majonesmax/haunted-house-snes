@@ -16,6 +16,8 @@
 
 #define THUNDER_GAP 90         /* frames: the lightning flickers, but one roll of thunder a strike */
 #define NO_EFFECT 0xFF
+#define TITLE_FLASH_EVERY 330        /* the title's lightning (screens.c)... */
+#define TITLE_THUNDER_DELAY 60       /* ...and its thunder, this many frames after: the storm is some way off */
 #define CALM_FRAMES 120        /* the tension music keeps on this long after the last monster has gone */
 
 /* What audio_events (src/fast.asm) works with: what the state was last frame (what's changed since is
@@ -67,6 +69,12 @@ void set_up_audio(void)
 static u8 song_wanted(void)
 {
     u8 state = RAM(GAME_STATE);
+    if (screen_shown == SCREEN_STORY) {
+        return SONG_story;
+    }
+    if (screen_shown == SCREEN_ENDING) {
+        return SONG_win;
+    }
     if (RAM(MONSTERS_HERE)) {
         calm_left = CALM_FRAMES;
     } else if (calm_left) {
@@ -104,10 +112,23 @@ static void choose_song(void)
 
 /* Each frame, once the game's frame is worked out: the song for the moment, the effect for what's just
    happened, then the driver's turn (it sends the effect, or a piece of data, to the sound chip). */
+/* Under the title's stormy sky (the title, game over, the help), thunder rolls a moment after each flash
+   (the NES game's hear_title_storm). */
+static void hear_title_storm(void)
+{
+    if (screen_shown != SCREEN_TITLE && screen_shown != SCREEN_GAME_OVER && screen_shown != SCREEN_HELP) {
+        return;
+    }
+    if (frame_count % TITLE_FLASH_EVERY == TITLE_THUNDER_DELAY) {
+        audio_effect = SFX_thunder;
+    }
+}
+
 void audio_frame(void)
 {
     choose_song();
     audio_events();
+    hear_title_storm();
     if (audio_effect != NO_EFFECT) {
         tad_queueSoundEffect(audio_effect);
         effect_left = effect_frames[audio_effect];
