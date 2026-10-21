@@ -1,6 +1,6 @@
 # Haunted House: By Matchlight (Super Nintendo)
 
-A native Super Nintendo game of the Atari 2600 *Haunted House* (1982): the same game, rule for rule, in the
+A native Super Nintendo game of the Atari 2600 *Haunted House* (James Andreasen, 1982): the same game, rule for rule, in the
 [NES game](https://github.com/majonesmax/haunted-house-nes)'s mansion - a cellar and four floors - drawn the
 way the [Haunted House remaster](https://github.com/majonesmax/haunted-house-remastered)'s SNES look draws it,
 and played on its orchestra. It runs on any SNES emulator, or a real SNES from a flash cartridge.
