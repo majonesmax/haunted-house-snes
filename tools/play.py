@@ -8,6 +8,8 @@ Keys (the SNES pad):
   Space or X               B: light a match; put down what you hold
   Enter                    Start: a new game (the 2600's RESET)
   Tab                      Select: the next game, 1-9
+  Z or G                   X: a hint in play; the help on the title; past the story
+  Space with Tab           B with Select: the lights cheat
   Escape                   quit
 
 Usage: python tools/play.py [--faithful]      (the shareable build without --faithful)
@@ -45,6 +47,7 @@ KEYS = {
     pygame.K_LEFT: S.BUTTON_LEFT, pygame.K_a: S.BUTTON_LEFT, pygame.K_RIGHT: S.BUTTON_RIGHT,
     pygame.K_d: S.BUTTON_RIGHT, pygame.K_SPACE: S.BUTTON_B, pygame.K_x: S.BUTTON_B,
     pygame.K_RETURN: S.BUTTON_START, pygame.K_TAB: S.BUTTON_SELECT,
+    pygame.K_z: S.BUTTON_X, pygame.K_g: S.BUTTON_X,
 }
 # the state block's bytes the map reads, by their 2600 addresses (src/state.h)
 FLOOR, ROOM, POS_X, POS_Y, LIVES, MATCHES = 0x8D, 0x9C, 0xAA, 0xB5, 0x96, 0x82
