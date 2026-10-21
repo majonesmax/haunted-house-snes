@@ -80,8 +80,9 @@ lightning switch is a setting on the title, Y the hint, Y + Select the lights-on
    the ending at dawn; the win at the door; the hints (X) and notes in play, in the band below
    (`tests/test_hints.py`: each hint as the remaster's rules say). The floor's name on arrival is the
    band's, as in the NES game.
-5. **Release** - README with pictures, `build.yml` (a tag makes the release), the browser page with
-   EmulatorJS's snes9x core, v1.0.0.
+5. **Release** - done: README with pictures (`tools/readme_media.py`), `build.yml` (a tag makes the
+   release, from GitHub's own build, checked as built), the browser page with EmulatorJS's snes9x core
+   (https://majonesmax.github.io/haunted-house-snes/), v1.0.0 on 2026-10-21.
 
 ## The hard parts, as expected
 
