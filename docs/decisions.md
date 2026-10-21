@@ -53,6 +53,18 @@ game's log is the model for this one.
   (sounds.c, the 2600's sound state); the linker kept one without complaint, so the main loop ran the
   engine's sound step twice and the new code not at all. The SNES's sound is audio.c, `audio_frame`.
 - **The ROM is 512K now**: the code and pictures fill the first 256K, the sound data starts at bank 8.
+- **The music is the soundtrack's notation turned into MML**, not recordings (tools/make_songs.py): the
+  melody on channel A, the style's accompaniment on B-D, the bass on E, the drums on F (timpani, and the
+  sound chip's noise for snare and hat), the echo for the hall; G and H are left to the effects. Twelve
+  songs take about 6K. The driver holds one song at a time, and loading another stops all sound for a few
+  frames, so a new song waits until the last effect has finished (each effect's length is worked out from
+  its notes): the monster's arrival is heard whole, then the tension music comes in. The driver's
+  tad_isSfxPlaying() turned out to mean "effects aren't paused", not "an effect is sounding".
+- **Loading a song costs frame time** (256 bytes a frame to the sound chip), and the late frames went from
+  0.85% to 1.3% in the engine check, whose bot changes floors and meets monsters far more than a player
+  does. Under the 2% allowed, but the margin is getting smaller.
+- **Another name clash**: the NES game's tools/make_music.py was found before this repository's on the
+  import path (the picture tool puts the NES tools first), so the song tool is make_songs.py.
 
 ## The hard parts
 

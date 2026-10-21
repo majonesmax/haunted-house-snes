@@ -72,7 +72,10 @@ lightning switch is a setting on the title, Y the hint, Y + Select the lights-on
 3. **The sound** - the driver in; the orchestra's instruments rendered short and encoded as samples; the
    songs from the pack's `music.json` written out as MML; the twenty effects. Done so far: the driver in,
    twelve instruments (about 20K), the twenty effects as MML on them, heard on the remaster's events
-   (`tests/test_events.py`: every frame agrees). Still to do: the music.
+   (`tests/test_events.py`: every frame agrees); the music - the twelve songs of the SNES look's soundtrack
+   and the mansion's own, arranged as the remaster's orchestra arranges them (`tools/make_songs.py`), the
+   song for the moment chosen as the NES game does. Still to come with step 4: the story's and the
+   ending's songs, which belong to those screens.
 4. **The screens** - the story, the title with its rain and fading lightning, the help, game over, the
    ending at dawn; the hints and notes in play.
 5. **Release** - README with pictures, `build.yml` (a tag makes the release), the browser page with

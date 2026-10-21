@@ -36,6 +36,7 @@ REMASTER = os.path.join(os.path.dirname(ROOT), "haunted-house")
 TAD = os.path.join(ROOT, "tools", "tad")
 TAD_COMPILER = os.path.join(TAD, "target", "release", "tad-compiler")
 sys.path.insert(0, REMASTER)
+import make_songs  # noqa: E402
 from music import house  # noqa: E402
 from music import orchestra as O  # noqa: E402
 from music.chiptune import RATE, midi_hz  # noqa: E402
@@ -260,13 +261,14 @@ def effects_text() -> str:
 
 # --- the project and the export ----------------------------------------------------------------------------
 def project(sound_folder: str, made: list[Instrument]) -> dict[str, object]:
+    songs = make_songs.write_songs(sound_folder)
     middle = effect_order()[len(FIRST_EFFECTS):len(EFFECTS) - len(LAST_EFFECTS)]
     return {"_about": {"file_type": "Terrific Audio Driver project file", "version": "0.4.2"},
             "brr_samples": [sample_entry(instrument, "samples") for instrument in made],
             "default_sfx_flags": {"one_channel": True, "interruptible": True},
             "high_priority_sound_effects": FIRST_EFFECTS, "sound_effects": middle,
             "low_priority_sound_effects": LAST_EFFECTS, "sound_effect_file": "sound-effects.txt",
-            "songs": []}
+            "songs": songs}
 
 
 def effect_order() -> list[str]:
@@ -297,7 +299,30 @@ def export(project_path: str, sound_folder: str) -> str:
 Maker = Callable[[], list[Instrument]]
 
 
-def write(kind_folder: str, make: Maker = instruments) -> None:
+TICKS = re.compile(r"%(\d+)")
+EFFECT_TICKS_A_SECOND = 125      # the driver plays effects at this fixed rate
+FRAMES_A_SECOND = 60
+
+
+def effect_frames(name: str) -> int:
+    """About how many frames an effect sounds: its notes', rests' and noises' lengths added up."""
+    ticks = sum(int(found) for found in TICKS.findall(EFFECTS[name]))
+    return min(255, round(ticks * FRAMES_A_SECOND / EFFECT_TICKS_A_SECOND))
+
+
+def songs_header_text(shareable: bool) -> str:
+    """songs.h: each floor's song, by floor, in the driver's numbering (audio.h, SONG_name); and each
+    effect's length in frames, in its numbering (a new song waits for the effect: loading one stops all)."""
+    songs = [f"SONG_{name}" if name else "SONG_BLANK" for name in make_songs.floor_songs(shareable)]
+    lengths = [str(effect_frames(name)) for name in effect_order()]
+    return ("/* Each floor's song and each effect's length: tools/make_sound.py. Don't edit. */\n"
+            "#ifndef SONGS_H\n#define SONGS_H\n/* (include audio.h first: its guard doesn't hold) */\n\n"
+            f"#define SONG_FLOORS {len(songs)}\n"
+            f"static const u8 floor_songs[SONG_FLOORS] = {{{', '.join(songs)}}};\n"
+            f"static const u8 effect_frames[{len(lengths)}] = {{{', '.join(lengths)}}};\n\n#endif\n")
+
+
+def write(kind_folder: str, shareable: bool = True, make: Maker = instruments) -> None:
     sound_folder = os.path.join(kind_folder, "sound")
     sample_folder = os.path.join(sound_folder, "samples")
     os.makedirs(sample_folder, exist_ok=True)
@@ -317,13 +342,16 @@ def write(kind_folder: str, make: Maker = instruments) -> None:
                    check=True)
     with open(os.path.join(ROOT, "src", "audio_ids.inc"), "w") as out:
         out.write(effect_numbers_text())
-    print(f"  the sound: {len(made)} instruments, {len(EFFECTS)} effects, "
+    with open(os.path.join(kind_folder, "songs.h"), "w") as out:
+        out.write(songs_header_text(shareable))
+    song_count = len(make_songs.all_songs())
+    print(f"  the sound: {len(made)} instruments, {len(EFFECTS)} effects, {song_count} songs, "
           f"{os.path.getsize(os.path.join(sound_folder, 'audio-data.bin'))} bytes")
 
 
 def main() -> None:
     shareable = "--faithful" not in sys.argv
-    write(os.path.join(ROOT, "build", "shareable" if shareable else "faithful"))
+    write(os.path.join(ROOT, "build", "shareable" if shareable else "faithful"), shareable)
 
 
 if __name__ == "__main__":
