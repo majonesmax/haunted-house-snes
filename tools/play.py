@@ -16,6 +16,8 @@ Usage: python tools/play.py [--faithful]      (the shareable build without --fai
 import collections
 import os
 import sys
+import threading
+import time
 
 import numpy as np
 import pygame
@@ -25,7 +27,10 @@ import snes as S
 from build import build, rom_path, shareable_wanted, symbols
 import make_mansion   # (after build: it puts the NES game's tools, which have a build.py too, on the path)
 
-FPS = 60.0988               # the SNES's frames a second (NTSC)
+SOUND_AHEAD = 2400          # samples kept queued (75 ms): the emulator runs whenever there are fewer, so
+                            # the sound sets the pace - pygame's clock counts whole milliseconds and ran
+                            # the game at 52 frames a second, the sound in gaps
+IDLE_SECONDS = 0.002        # the wait between looks at the queue
 SCALE = 2                   # the picture, 256 x 224, scaled
 MAP_SCALE = 2               # the map: a floor is 160 x 256 units
 MAP_LEFT = 256 * SCALE + 16
@@ -61,17 +66,27 @@ class Speaker:
     def __init__(self, rate: float):
         self.queue: collections.deque[np.ndarray] = collections.deque()
         self.waiting = 0
+        self.lock = threading.Lock()     # (the sound card's thread takes from the queue as the game adds)
         self.stream = sounddevice.OutputStream(samplerate=rate, channels=2, dtype="int16",
                                                blocksize=AUDIO_BLOCK, callback=self.fill)
         self.stream.start()
 
     def add(self, samples: np.ndarray) -> None:
-        self.queue.append(samples)
-        self.waiting += len(samples)
-        while self.waiting > MOST_QUEUED and len(self.queue) > 1:
-            self.waiting -= len(self.queue.popleft())
+        with self.lock:
+            self.queue.append(samples)
+            self.waiting += len(samples)
+            while self.waiting > MOST_QUEUED and len(self.queue) > 1:
+                self.waiting -= len(self.queue.popleft())
+
+    def queued(self) -> int:
+        with self.lock:
+            return self.waiting
 
     def fill(self, out: np.ndarray, frames: int, _time: object, _status: object) -> None:
+        with self.lock:
+            self.take(out, frames)
+
+    def take(self, out: np.ndarray, frames: int) -> None:
         filled = 0
         while filled < frames and self.queue:
             chunk = self.queue[0]
@@ -171,22 +186,28 @@ def main() -> None:
     state_map = StateMap(machine, shareable)
     speaker = Speaker(machine.sample_rate())
     machine.recording = True
-    clock = pygame.time.Clock()
     while True:
         for event in pygame.event.get():
             if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
                 return
+        if speaker.queued() >= SOUND_AHEAD:
+            time.sleep(IDLE_SECONDS)
+            continue
         machine.sound.clear()
         machine.run(1, held_buttons())
         for samples in machine.sound:
             speaker.add(samples)
-        window.fill((0, 0, 0))
-        if machine.picture is not None:
-            frame = pygame.surfarray.make_surface(machine.picture[..., :3].swapaxes(0, 1))
-            window.blit(pygame.transform.scale(frame, (256 * SCALE, 224 * SCALE)), (0, 0))
-        state_map.draw(window)
-        pygame.display.flip()
-        clock.tick(FPS)
+        show(window, machine, state_map)
+
+
+def show(window: pygame.Surface, machine: S.Snes, state_map: "StateMap") -> None:
+    """The latest picture, scaled, and the state map beside it."""
+    window.fill((0, 0, 0))
+    if machine.picture is not None:
+        frame = pygame.surfarray.make_surface(machine.picture[..., :3].swapaxes(0, 1))
+        window.blit(pygame.transform.scale(frame, (256 * SCALE, 224 * SCALE)), (0, 0))
+    state_map.draw(window)
+    pygame.display.flip()
 
 
 if __name__ == "__main__":

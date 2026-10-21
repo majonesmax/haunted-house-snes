@@ -46,6 +46,7 @@ INSTRUMENTS = """@organ organ
 @tremble strings adsr 15 4 4 0
 @timpani timpani
 @noise organ adsr 15 6 0 0
+@hat organ adsr 15 7 0 0
 """
 MELODY_VOLUME, PART_VOLUME, BASS_VOLUME, DRUM_VOLUME = 110, 55, 80, 80   # (the effects sit a little above)
 HEADER = """#ZenLen 192
@@ -167,7 +168,9 @@ PART_INSTRUMENTS = {"organ": ("organ", "organ", "organ", "organ"),
 
 
 # --- the drums ------------------------------------------------------------------------------------------
-DRUM_HITS = {"k": "@timpani o1 b%{t}", "s": "@noise N20,%{t}", "h": "@noise N28,%{t}"}
+# The orchestra's drums (music/orchestra.py): the timpani at full, the snare at half and short, the hat a
+# faint tick - noise from the sound chip, at its loudness and with its quick decay.
+DRUM_HITS = {"k": "@timpani V80 o1 b%{t}", "s": "@noise V40 N20,%{t}", "h": "@hat V14 N28,%{t}"}
 
 
 def drum_bar(pattern: str) -> str:

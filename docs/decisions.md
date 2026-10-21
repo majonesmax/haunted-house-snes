@@ -63,6 +63,12 @@ game's log is the model for this one.
 - **Loading a song costs frame time** (256 bytes a frame to the sound chip), and the late frames went from
   0.85% to 1.3% in the engine check, whose bot changes floors and meets monsters far more than a player
   does. Under the 2% allowed, but the margin is getting smaller.
+- **The play window let the sound set its pace.** pygame's clock counts whole milliseconds and ran the
+  window at 52 frames a second, not 60: the emulator made seven-eighths of the sound the sound card
+  played, and the gaps came out as skipping and clicks (the first thing the owner heard). Now the window
+  runs a frame whenever fewer than 75 ms of sound are queued, so the game runs at its own speed and the
+  sound never runs dry. The drums' snare and hat were also much louder and longer than the remaster's;
+  they're at its levels now.
 - **Another name clash**: the NES game's tools/make_music.py was found before this repository's on the
   import path (the picture tool puts the NES tools first), so the song tool is make_songs.py.
 
