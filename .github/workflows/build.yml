@@ -82,13 +82,15 @@ jobs:
         with:
           name: haunted_house.sfc
           path: haunted-house-snes/build/shareable/haunted_house.sfc
-      - name: The generated data (headers, tables, sound), to compare a build here with one elsewhere
+      - name: The generated data (headers, tables, sound) and the C as compiled, to compare builds
         uses: actions/upload-artifact@v4
         with:
           name: generated
           path: |
             haunted-house-snes/build/shareable
             !haunted-house-snes/build/shareable/haunted_house.sfc
+            haunted-house-snes/src/*.ps
+            haunted-house-snes/src/*.asm
       - name: The release (on a version tag)
         if: startsWith(github.ref, 'refs/tags/v')
         working-directory: haunted-house-snes
