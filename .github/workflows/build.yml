@@ -70,10 +70,10 @@ jobs:
         run: python tests/verify_engine.py --shareable 1500
       - name: The sound effects fire on the right events
         working-directory: haunted-house-snes
-        run: python tests/test_events.py 300
+        run: python tests/test_events.py
       - name: The hints say what the remaster's rules say
         working-directory: haunted-house-snes
-        run: python tests/test_hints.py 300
+        run: python tests/test_hints.py
       - name: A match lit again on the spot gives light
         working-directory: haunted-house-snes
         run: python tests/test_light.py

@@ -5,7 +5,9 @@ The engine check's bot plays (tests/verify_engine.py: the same games and scenes)
 128-byte state becomes the remaster's GameState, its EventWatcher says which effects that frame asks
 for, and the one the SNES wants must be the first of those in the driver's numbering (it plays one a
 frame, the lowest-numbered: tools/make_sound.py). The lightning is the SNES's own (the remaster reads it
-from a 2600 drawing byte the engine doesn't keep), so the watcher is given the SNES's.
+from a 2600 drawing byte the engine doesn't keep), so the watcher is given the SNES's. The storm over the
+title, game over and help (src/audio.c's hear_title_storm) is the screens', not the game's: its thunder is
+counted apart, not judged by the rules for play.
 
 Usage: python tests/test_events.py [--faithful] [frames per game]   (exit code 1 on any disagreement)
 """
@@ -25,6 +27,7 @@ from music.events import EventWatcher  # noqa: E402
 from game import palette as game_palette  # noqa: E402
 
 NO_EFFECT = 0xFF
+SCREEN_PLAY = 0              # src/engine.h: screen_shown in play
 FRAMES_PER_GAME = 1500
 SHOWN_DISAGREEMENTS = 10
 
@@ -41,6 +44,7 @@ class Listening(E.SnesLab):
         where = E.symbols(shareable_build)
         self.effect_at = where["audio_effect"] - E.WORK_RAM_BANK
         self.flash_at = where["lightning_flashing"] - E.WORK_RAM_BANK
+        self.screen_at = where["screen_shown"] - E.WORK_RAM_BANK
         self.watcher = EventWatcher()
         self.heard: collections.Counter[str] = collections.Counter()
         self.disagreements: list[tuple[int, str, str]] = []
@@ -62,6 +66,10 @@ class Listening(E.SnesLab):
         number = int(self.snes.ram[self.effect_at])
         played = self.order[number] if number != NO_EFFECT else ""
         wanted = self.wanted()
+        storm = played == "thunder" and self.snes.ram[self.screen_at] != SCREEN_PLAY
+        if storm and not wanted:
+            self.heard["thunder over a screen (its storm)"] += 1
+            return
         self.heard[played or "(none)"] += 1
         if played != wanted:
             self.disagreements.append((self.frames, wanted or "(none)", played or "(none)"))

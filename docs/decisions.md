@@ -128,6 +128,27 @@ game's log is the model for this one.
   where working them out took 15. The screens had added about 8 lines to every play frame, and the
   bot's heaviest frames were already at the limit.
 
+## 2026-10-21: the release is the ROM GitHub builds, and the checks run on that ROM
+
+- **A Mac and GitHub's Linux machine build different ROMs from the same source**, for two reasons. One
+  was ours, now fixed: the floors' colours were sorted with numpy's default sort, which breaks ties
+  differently on Intel and Apple processors, so a tile with equally common colours kept different ones
+  (some 900 pixels of the Cellar and the Attic). A stable sort keeps one order everywhere, and the picture
+  data is now the same byte for byte. The other is PVSnesLib's compiler: it reads uninitialised memory
+  (its comments in `src/*.ps` print it), and on the Mac that decides whether a function without local
+  variables gets stack set-up wrapped in a condition that assembles to nothing. The code is the same in
+  effect, but not in size, so everything after it moves.
+- **So the release is GitHub's build, and every check runs on it**: `build.yml` builds the ROM and runs the
+  checks on that very file before releasing it. Run here at full length on GitHub's ROM, the engine check
+  was exact on all 35,997 frames, with the same late frames as the Mac's build (1.11%), and the effects,
+  hints and light agreed.
+- **The build keeps what it made**, as an artifact: the generated data, each floor's scene before its
+  colours are cut down, and the C as compiled (the Makefile's `.SECONDARY`). Comparing two builds starts
+  there.
+- **The effects check at full length found one frame** the short runs never reached: the storm's thunder
+  over the game-over screen, which is the screens' (the NES game's way), not an event of play. The check
+  now counts it apart, and runs at full length on GitHub.
+
 ## The hard parts
 
 - **The compiler is wrong about some conditions.** 816-tcc compiles `a || !b || c`, `!a || b` and
