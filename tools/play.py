@@ -1,7 +1,7 @@
-"""Play the ROM on this computer, with the keyboard: a window with the SNES's picture, the sound, and
-beside it a map of the game's state read from the engine - the floor's walls, the eyes, the items, the
-monsters and the numbers - so the engine can be watched before the picture is drawn (and against the
-picture, once it is). Builds the ROM first if it isn't built.
+"""Play the ROM on this computer, with the keyboard: one window with the SNES's picture, and the sound.
+Builds the ROM first if it isn't built. With --map, a map of the game's state read from the engine sits
+beside the picture - the floor's walls, the eyes, the items, the monsters, and the numbers under it - to
+watch the engine against the picture.
 
 Keys (the SNES pad):
   arrow keys or W A S D    the D-pad: walk
@@ -9,10 +9,10 @@ Keys (the SNES pad):
   Enter                    Start: a new game (the 2600's RESET)
   Tab                      Select: the next game, 1-9
   Z or G                   X: a hint in play; the help on the title; past the story
-  Space with Tab           B with Select: the lights cheat
+  O                        B and Select together: the lights-on cheat
   Escape                   quit
 
-Usage: python tools/play.py [--faithful]      (the shareable build without --faithful)
+Usage: python tools/play.py [--faithful] [--map]      (the shareable build without --faithful)
 """
 
 import collections
@@ -33,11 +33,13 @@ SOUND_AHEAD = 2400          # samples kept queued (75 ms): the emulator runs whe
                             # the sound sets the pace - pygame's clock counts whole milliseconds and ran
                             # the game at 52 frames a second, the sound in gaps
 IDLE_SECONDS = 0.002        # the wait between looks at the queue
-SCALE = 2                   # the picture, 256 x 224, scaled
-MAP_SCALE = 2               # the map: a floor is 160 x 256 units
-MAP_LEFT = 256 * SCALE + 16
-NUMBER_LINES, LINE_HEIGHT = 6, 18   # the numbers under the picture
-WINDOW = (MAP_LEFT + 160 * MAP_SCALE + 16, 224 * SCALE + 16 + NUMBER_LINES * LINE_HEIGHT)
+SCALE = 3                   # the picture, 256 x 224, scaled (as the NES game's window)
+PICTURE = (256 * SCALE, 224 * SCALE)
+CHEAT_FRAMES = 6            # how long O holds B and Select together
+MAP_SCALE = 2               # --map: a floor is 160 x 256 units
+MAP_LEFT = PICTURE[0] + 16
+NUMBER_LINES, LINE_HEIGHT = 6, 18   # --map: the numbers under the picture
+MAP_WINDOW = (MAP_LEFT + 160 * MAP_SCALE + 16, PICTURE[1] + 16 + NUMBER_LINES * LINE_HEIGHT)
 AUDIO_BLOCK = 512           # samples the sound card asks for at a time
 MOST_QUEUED = 8000          # samples kept waiting at most: past this the oldest go, so the sound keeps up
 WORK_RAM_BANK = 0x7E0000
@@ -169,12 +171,16 @@ class StateMap:
 
     def draw_numbers(self, window: pygame.Surface) -> None:
         for line, text in enumerate(self.numbers()):
-            window.blit(self.font.render(text, True, TEXT_COLOUR), (8, 224 * SCALE + 8 + line * LINE_HEIGHT))
+            window.blit(self.font.render(text, True, TEXT_COLOUR), (8, PICTURE[1] + 8 + line * LINE_HEIGHT))
 
 
-def held_buttons() -> set[int]:
+def held_buttons(cheat_left: int) -> set[int]:
+    """The buttons the keys hold, and B and Select together for a few frames after O."""
     pressed = pygame.key.get_pressed()
-    return {button for key, button in KEYS.items() if pressed[key]}
+    held = {button for key, button in KEYS.items() if pressed[key]}
+    if cheat_left > 0:
+        held |= {S.BUTTON_B, S.BUTTON_SELECT}
+    return held
 
 
 def main() -> None:
@@ -184,32 +190,38 @@ def main() -> None:
         build(shareable=shareable)
     machine = S.Snes(rom)
     pygame.init()
-    window = pygame.display.set_mode(WINDOW)
-    pygame.display.set_caption("Haunted House: By Matchlight (SNES)")
-    state_map = StateMap(machine, shareable)
+    with_map = "--map" in sys.argv
+    window = pygame.display.set_mode(MAP_WINDOW if with_map else PICTURE)
+    pygame.display.set_caption("Haunted House: By Matchlight")
+    state_map = StateMap(machine, shareable) if with_map else None
     speaker = Speaker(machine.sample_rate())
     machine.recording = True
+    cheat_left = 0
     while True:
         for event in pygame.event.get():
             if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
                 return
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_o:
+                cheat_left = CHEAT_FRAMES
         if speaker.queued() >= SOUND_AHEAD:
             time.sleep(IDLE_SECONDS)
             continue
         machine.sound.clear()
-        machine.run(1, held_buttons())
+        machine.run(1, held_buttons(cheat_left))
+        cheat_left -= 1
         for samples in machine.sound:
             speaker.add(samples)
         show(window, machine, state_map)
 
 
-def show(window: pygame.Surface, machine: S.Snes, state_map: "StateMap") -> None:
-    """The latest picture, scaled, and the state map beside it."""
+def show(window: pygame.Surface, machine: S.Snes, state_map: "StateMap | None") -> None:
+    """The latest picture, scaled, and with --map the state map beside it."""
     window.fill((0, 0, 0))
     if machine.picture is not None:
         frame = pygame.surfarray.make_surface(machine.picture[..., :3].swapaxes(0, 1))
-        window.blit(pygame.transform.scale(frame, (256 * SCALE, 224 * SCALE)), (0, 0))
-    state_map.draw(window)
+        window.blit(pygame.transform.scale(frame, PICTURE), (0, 0))
+    if state_map is not None:
+        state_map.draw(window)
     pygame.display.flip()
 
 

@@ -16,7 +16,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 python tools/get_tools.py               # PVSnesLib, the audio driver's source and the snes9x core (not committed)
 python tools/build.py                   # build/shareable/haunted_house.sfc (the NES game's mansion)
 python tools/build.py --faithful        # build/faithful/: the original's mansion, from your 2600 ROM (never shared)
-python tools/play.py [--faithful]       # play it: a window with the picture, the sound, and a map of the engine's state
+python tools/play.py [--faithful] [--map]   # play it: one window, the picture and the sound (--map: the engine's state beside)
 python tools/screenshot.py NAME 60 10:start 30   # play some frames, save shots/NAME.png
 python tests/test_boot.py [--faithful]  # the ROM boots and counts frames
 python tools/make_sound.py                # the sound's samples, effects, songs (tools/make_songs.py) and driver data
