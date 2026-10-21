@@ -116,10 +116,11 @@ void set_up_light(void)
 #define MATH_WITH_FIXED 0x00         /* CGWSEL: ...adds the fixed colour, everywhere */
 #define ADD_TO_SKY 0x20              /* CGADSUB: add, to the backdrop alone */
 #define ADD_TO_ALL 0x3F              /* CGADSUB: add, to every layer and the backdrop */
+#define ADD_TO_ALL_BUT_WORDS 0x3B    /* ...to all but BG3, the words: they stay readable in the light */
 #define FADE_FROM_LIGHT 40           /* frames: the ending fades in from the light at the door */
-#define LIGHT_RED 19                 /* the light (the SNES look's DAWN_LIGHT, 60% of it), in 5 bits */
-#define LIGHT_GREEN 16
-#define LIGHT_BLUE 12
+#define LIGHT_RED 31                 /* the light (the SNES look's DAWN_LIGHT), in 5 bits: all the steps */
+#define LIGHT_GREEN 26               /* the console has, so the fade changes nearly every frame */
+#define LIGHT_BLUE 20
 static void forget_colour_rules(void)
 {
     shown_mask = 0xFF;               /* (play's rules are written afresh when it comes back) */
@@ -130,15 +131,16 @@ static void forget_colour_rules(void)
     shown_blue = 0xFF;
 }
 
-/* The win at the door: the screen warms towards the light outside as the game holds the moment (the
-   SNES look's lighten), the fixed colour added to everything, a little more each frame. */
-#define WON_FRAMES 240
+/* The win at the door: the screen warms towards the light outside (the SNES look's lighten), the fixed
+   colour added to everything, a little more each frame; it's there in a second and a half, and the game
+   holds the moment (about four seconds) in the light. */
+#define WON_FRAMES 90
 static void won_colour_rules(void)
 {
     u16 level = won_frames < WON_FRAMES ? won_frames : WON_FRAMES;
     REG_TMW = MASK_NOTHING;
     REG_CGWSEL = MATH_WITH_FIXED;
-    REG_CGADSUB = ADD_TO_ALL;
+    REG_CGADSUB = ADD_TO_ALL_BUT_WORDS;
     REG_COLDATA = FIXED_RED | (u8)(LIGHT_RED * level / WON_FRAMES);
     REG_COLDATA = FIXED_GREEN | (u8)(LIGHT_GREEN * level / WON_FRAMES);
     REG_COLDATA = FIXED_BLUE | (u8)(LIGHT_BLUE * level / WON_FRAMES);
