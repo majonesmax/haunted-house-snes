@@ -26,6 +26,8 @@ python tests/test_light.py [--faithful]             # a match lit again where th
 python tests/verify_engine.py [--shareable] [frames] [seed]   # the engine against the remaster's model, frame
                                         # by frame (run it after any change to src/, on both builds)
 python tests/test_compiler.py           # the compiler's wrong condition shapes are the known ones
+python tools/readme_media.py            # the README's pictures, from the shareable ROM (docs/media/)
+git tag v1.0.0 && git push origin v1.0.0   # a release: build.yml checks, builds, releases, puts the page up
 ruff check --config ruff.toml . && python tools/readability.py && pyright   # the code rules
 ```
 

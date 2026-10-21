@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Haunted House: By Matchlight (SNES)</title>
+  <meta name="description" content="Atari 2600 Haunted House, rule for rule, as a native Super Nintendo game - play it in your browser.">
+  <style>
+    :root {
+      /* A Halloween dressing for the season: pumpkin orange on a deep purple night. */
+      --background: #0e0816;
+      --panel: #1a1028;
+      --text: #ece6f2;
+      --muted: #a79bbd;
+      --accent: #ff8f2a;
+      --line: #35254d;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--background);
+      background-image: radial-gradient(ellipse 60% 40% at 80% -10%, #2a1744 0%, transparent 70%);
+      color: var(--text);
+      font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    main { max-width: 1320px; margin: 0 auto; padding: 24px 16px 48px; }
+    header { position: relative; padding-right: 180px; }
+    h1 { margin: 0 0 4px; font-size: 1.8rem; letter-spacing: 0.02em; }
+    h1 span { color: var(--accent); text-shadow: 0 0 18px rgba(255, 143, 42, 0.45); }
+    /* The moon and bats, drawn in the page itself. */
+    .night { position: absolute; right: 0; top: -8px; width: 170px; height: 80px; pointer-events: none; }
+    .night .bat { animation: flutter 3.2s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+    .night .bat.b2 { animation-duration: 2.6s; animation-delay: -1s; }
+    .night .bat.b3 { animation-duration: 3.8s; animation-delay: -2s; }
+    @keyframes flutter { 0%, 100% { translate: 0 0; rotate: -6deg; } 50% { translate: 0 -5px; rotate: 6deg; } }
+    @media (prefers-reduced-motion: reduce) { .night .bat { animation: none; } }
+    @media (max-width: 560px) { header { padding-right: 0; } .night { display: none; } }
+    .season { display: inline-block; margin-left: 8px; padding: 1px 10px; border: 1px solid var(--accent);
+      border-radius: 999px; color: var(--accent); font-size: 0.8rem; letter-spacing: 0.08em; text-transform: uppercase; }
+    .tagline { margin: 0 0 20px; color: var(--muted); }
+    .layout { display: grid; grid-template-columns: minmax(0, 1fr) 250px; gap: 20px; align-items: start; }
+    @media (max-width: 760px) { .layout { grid-template-columns: 1fr; } }
+    #game-frame {
+      position: relative;
+      /* The whole SNES picture: 256 x 224, at the core's 8:7 pixel aspect, so no bars - and as big as the
+         window allows, keeping room for the heading above (fullscreen is in the emulator's own bar). */
+      --picture-aspect: calc(256 * 8 / 7 / 224);
+      --room-for-heading: 120px;
+      width: min(100%, calc((100vh - var(--room-for-heading)) * var(--picture-aspect)));
+      min-width: min(100%, 480px);
+      aspect-ratio: var(--picture-aspect);
+      background: #000;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    #game { width: 100%; height: 100%; }
+    aside { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px; }
+    aside h2 { margin: 0 0 8px; font-size: 1rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+    td { padding: 4px 0; vertical-align: top; }
+    td:first-child { width: 6.5em; }
+    kbd {
+      display: inline-block; min-width: 1.6em; padding: 1px 6px; text-align: center;
+      background: #22223a; border: 1px solid #3a3a5c; border-bottom-width: 2px; border-radius: 4px;
+      font: 0.85rem ui-monospace, Menlo, monospace; color: var(--text);
+    }
+    p.small { font-size: 0.9rem; color: var(--muted); margin: 0 0 10px; }
+    a { color: var(--accent); }
+    footer { margin-top: 24px; font-size: 0.85rem; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Haunted House: <span>By Matchlight</span></h1>
+      <p class="tagline">Atari 2600 <em>Haunted House</em>, rule for rule, as a native Super Nintendo game - in a mansion with a cellar and four floors, by the light of a match.
+        <span class="season">Happy Halloween</span></p>
+      <svg class="night" viewBox="0 0 170 80" aria-hidden="true">
+        <defs><radialGradient id="glow"><stop offset="60%" stop-color="#0e0816"/><stop offset="100%" stop-color="#1b1030"/></radialGradient></defs>
+        <!-- The moon: a disc with a bite of night taken out. -->
+        <circle cx="130" cy="38" r="26" fill="#f7e3a1" opacity="0.9"/>
+        <circle cx="140" cy="30" r="24" fill="url(#glow)"/>
+        <!-- Three bats: a body and two scalloped wings each. -->
+        <g class="bat b1" fill="#45306a">
+          <path d="M22 40 q6 -10 14 -4 q2 -5 6 0 q4 -6 14 4 q-6 2 -8 8 q-3 -4 -6 -1 q-3 -3 -6 1 q-2 -6 -8 -8z"/>
+        </g>
+        <g class="bat b2" fill="#45306a" transform="translate(50 12) scale(0.7)">
+          <path d="M22 40 q6 -10 14 -4 q2 -5 6 0 q4 -6 14 4 q-6 2 -8 8 q-3 -4 -6 -1 q-3 -3 -6 1 q-2 -6 -8 -8z"/>
+        </g>
+        <g class="bat b3" fill="#45306a" transform="translate(70 40) scale(0.55)">
+          <path d="M22 40 q6 -10 14 -4 q2 -5 6 0 q4 -6 14 4 q-6 2 -8 8 q-3 -4 -6 -1 q-3 -3 -6 1 q-2 -6 -8 -8z"/>
+        </g>
+      </svg>
+    </header>
+    <div class="layout">
+      <div id="game-frame"><div id="game"></div></div>
+      <aside>
+        <h2>Keys</h2>
+        <table>
+          <tr><td><kbd>&larr;</kbd><kbd>&uarr;</kbd><kbd>&darr;</kbd><kbd>&rarr;</kbd></td><td>walk</td></tr>
+          <tr><td><kbd>X</kbd></td><td>light a match; put down what you hold</td></tr>
+          <tr><td><kbd>Enter</kbd></td><td>start a game (any key, past the story)</td></tr>
+          <tr><td><kbd>Shift</kbd></td><td>choose the game, 1-9</td></tr>
+          <tr><td><kbd>Z</kbd></td><td>a hint (on the title: the help)</td></tr>
+          <tr><td><kbd>X</kbd>+<kbd>Shift</kbd></td><td>lights on (a cheat)</td></tr>
+        </table>
+        <h2>How to play</h2>
+        <p class="small">You're the pair of eyes, in the dark. Find the three pieces of the urn and carry the whole
+          urn out of the front door, on the Foyer's right-hand edge, where you start.</p>
+        <p class="small">Light a match to see what's near you. A monster in the room blows it out. You can hold one
+          thing at a time: the scepter keeps monsters from chasing you; the master key opens locked doors.</p>
+        <p class="small">Game 1 is the gentlest: the walls always show. Stairs are at the rooms' edges.</p>
+        <h2>More</h2>
+        <p class="small"><a href="https://github.com/majonesmax/haunted-house-snes/releases/latest">Download the ROM</a>
+          for any SNES emulator, or a real SNES from a flash cartridge.</p>
+        <p class="small"><a href="https://github.com/majonesmax/haunted-house-snes">How it's made</a>, on GitHub. There's an
+          <a href="https://majonesmax.github.io/haunted-house-nes/">NES game</a> too.</p>
+      </aside>
+    </div>
+    <footer>
+      Runs in your browser with <a href="https://emulatorjs.org">EmulatorJS</a> and its snes9x core, loaded
+      from their site. <em>Haunted House</em> is &copy; 1982 Atari, by James Andreasen; this is a fan-made game on its
+      rules, and nothing from the original is in it.
+    </footer>
+  </main>
+  <script>
+    // EmulatorJS (https://emulatorjs.org/docs/options): the snes9x core, the same one the project's checks
+    // play the ROM in. Button numbers for the SNES: 0 B, 1 Y, 2 Select, 3 Start, 4-7 up, down, left, right,
+    // 8 A, 9 X. On a gamepad they sit as on the SNES's own: B at the bottom, A right, Y left, X at the top.
+    EJS_player = "#game";
+    EJS_core = "snes9x";
+    EJS_gameUrl = "haunted_house.sfc";
+    EJS_gameName = "Haunted House - By Matchlight (SNES)";
+    EJS_pathtodata = "https://cdn.emulatorjs.org/4.2.3/data/";
+    EJS_color = "#f2b33d";
+    EJS_backgroundColor = "#0b0b14";
+    EJS_volume = 0.6;
+    EJS_defaultControls = {
+      0: {
+        0: { value: "x", value2: "BUTTON_1" },
+        2: { value: "shift", value2: "SELECT" },
+        3: { value: "enter", value2: "START" },
+        4: { value: "up arrow", value2: "DPAD_UP" },
+        5: { value: "down arrow", value2: "DPAD_DOWN" },
+        6: { value: "left arrow", value2: "DPAD_LEFT" },
+        7: { value: "right arrow", value2: "DPAD_RIGHT" },
+        8: { value: "c", value2: "BUTTON_2" },
+        9: { value: "z", value2: "BUTTON_4" },
+      },
+      1: {}, 2: {}, 3: {},
+    };
+
+    // The sound's delay: EmulatorJS gives RetroArch a 64 ms audio buffer, and the browser adds its own on top,
+    // so the sound comes a little late. Leave it. The emulator paces itself on that buffer: with it smaller
+    // than the sound device's own delay, the whole game slows down (the NES page's finding).
+  </script>
+  <script src="https://cdn.emulatorjs.org/4.2.3/data/loader.js"></script>
+</body>
+</html>

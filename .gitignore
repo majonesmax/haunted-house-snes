@@ -33,3 +33,4 @@ tests/compiler_check/src/*.asm
 !src/fast.asm
 tests/compiler_check/src/*.obj
 src/art_data.asm
+.DS_Store

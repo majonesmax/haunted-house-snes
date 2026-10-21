@@ -58,7 +58,7 @@ lightning switch is a setting on the title, Y the hint, Y + Select the lights-on
 
 0. **Tools and a boot** - done: PVSnesLib and the driver fetched by `tools/get_tools.py`; a ROM that boots
    to a colour; `tools/snes.py` and `tests/test_boot.py`; the code checks (ruff, pyright, readability for
-   the Python) and `.github/workflows/checks.yml`.
+   the Python) and `.github/workflows/build.yml`.
 1. **The engine** - done: in C from the spec, the mansion as data; `tests/verify_engine.py` exact on both
    builds, 36,000 frames each, no frame late.
 2. **The picture** - the SNES look: the floors in 16-colour tiles from the nocturne pack (the remaster's
