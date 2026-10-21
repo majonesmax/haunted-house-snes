@@ -131,6 +131,22 @@ def seconds(count: float) -> int:
     return int(count * RATE)
 
 
+RUMBLE_RATE = 4000         # the thunder's rumble: low, so a low sample rate holds it...
+RUMBLE_LENGTH = 2048       # ...and a loop of this many samples (half a second)
+RUMBLE_LOW, RUMBLE_HIGH, RUMBLE_TILT = 30, 700, 0.7   # Hz kept, louder low down (music/house.py thunder)
+
+
+def rumble() -> Instrument:
+    """The thunder's rumble (the remaster's house.thunder): noise kept to its low frequencies. Filtered
+    round the loop, it loops without a seam."""
+    noise = np.random.default_rng(31).normal(size=RUMBLE_LENGTH)
+    frequencies = np.fft.rfftfreq(RUMBLE_LENGTH, 1 / RUMBLE_RATE)
+    keep = (frequencies >= RUMBLE_LOW) & (frequencies <= RUMBLE_HIGH)
+    shape = keep / np.maximum(frequencies, RUMBLE_LOW) ** RUMBLE_TILT
+    low = np.fft.irfft(np.fft.rfft(noise) * shape, RUMBLE_LENGTH)
+    return Instrument("rumble", low, RUMBLE_RATE, midi_hz(60), True, "adsr 12 1 4 9")
+
+
 def struck_instruments() -> list[Instrument]:
     """The ones that play once: plucked, struck, knocked, creaking."""
     harp_root, bell_root, harpsichord_root = midi_hz(69), midi_hz(84), midi_hz(72)
@@ -141,6 +157,7 @@ def struck_instruments() -> list[Instrument]:
         one_shot("timpani", O.timpani(seconds(0.7)), 8000, 58.0),
         one_shot("wood", house.wood(40, 120, 0.025), 16000, 120.0),
         one_shot("creak", house.creak(4, 0.55, 140), 8000, midi_hz(60)),
+        rumble(),
     ]
 
 
@@ -228,8 +245,9 @@ EFFECTS: dict[str, str] = {
                  "A @h v12 l%4 n67 n69 n71 n74 n76 n79 n81 n83 n86 n88 n91 n95 @s v12 n55,%200",
     # caught: clashing strings, sliding away
     "caught": "@x strings_clash\nA @x v14 n62,%30 {d <d}%100",
-    # a crack and a roll: noise, high then low, dying away
-    "thunder": "@o organ adsr 15 2 6 5\nA @o v14 N27,%12 N9,%40 Vs-180,180 N8,%180",
+    # a crack, a timpani roll and the storm's low rumble, dying away
+    "thunder": "@o organ adsr 15 7 0 0\n@t timpani\n@r rumble\n"
+               "A @o v7 N18,%8 @t v13 n35,%7 v11 n35,%7 v9 n35,%7 @r v15 n60,%220",
     # oooo: an organ chord that swells and sinks a semitone
     "monster_ghost": "@g organ_minor\nA @g V60 Vs+150,50 n57,%69 n56,%69",
     # wings: a flurry on the harpsichord, high

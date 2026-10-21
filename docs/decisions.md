@@ -69,6 +69,11 @@ game's log is the model for this one.
   runs a frame whenever fewer than 75 ms of sound are queued, so the game runs at its own speed and the
   sound never runs dry. The drums' snare and hat were also much louder and longer than the remaster's;
   they're at its levels now.
+- **The thunder is a timpani roll and a sampled rumble, not the sound chip's noise.** Being caught makes
+  the walls flash while you die, and each flash's thunder was raw noise - a burst of hiss, 15% of it above
+  3 kHz, that the owner heard as static. Now it's the remaster's: a soft crack, three timpani strokes, and
+  a rumble - noise filtered to 30-700 Hz, as music/house.py makes it, in a 2048-sample loop at 4 kHz
+  (filtered round the loop, so it loops without a seam; about 1K).
 - **Another name clash**: the NES game's tools/make_music.py was found before this repository's on the
   import path (the picture tool puts the NES tools first), so the song tool is make_songs.py.
 
