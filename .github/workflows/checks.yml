@@ -52,3 +52,6 @@ jobs:
       - name: The hints say what the remaster's rules say
         working-directory: haunted-house-snes
         run: python tests/test_hints.py 300
+      - name: A match lit again on the spot gives light
+        working-directory: haunted-house-snes
+        run: python tests/test_light.py

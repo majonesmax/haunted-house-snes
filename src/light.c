@@ -284,6 +284,8 @@ static void close_table(void)
     u8 *table = closed_lines(light_table + light_table_offset, SCREEN_LINES);
     *table = 0;
     table_closed[table_index] = 1;
+    rows_centre_x[table_index] = 0xFF;   /* (the end just written lies on the first row: the next match
+                                            must write the rows again, wherever it's lit) */
 }
 
 /* The other table next time. */
