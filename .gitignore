@@ -18,6 +18,9 @@ shots/
 src/*.ps
 src/*.asm
 !src/fast.asm
+!src/tad_audio.asm
+src/audio_data.asm
+src/audio_ids.inc
 src/*.obj
 tests/compiler_check/*.sfc
 tests/compiler_check/*.sym

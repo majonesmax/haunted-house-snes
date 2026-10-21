@@ -19,6 +19,8 @@ python tools/build.py --faithful        # build/faithful/: the original's mansio
 python tools/play.py [--faithful]       # play it: a window with the picture, the sound, and a map of the engine's state
 python tools/screenshot.py NAME 60 10:start 30   # play some frames, save shots/NAME.png
 python tests/test_boot.py [--faithful]  # the ROM boots and counts frames
+python tools/make_sound.py                # the sound's samples, effects and driver data (tools/build.py runs it)
+python tests/test_events.py [--faithful] [frames]   # each frame's sound effect is the one the remaster's rules ask for
 python tests/verify_engine.py [--shareable] [frames] [seed]   # the engine against the remaster's model, frame
                                         # by frame (run it after any change to src/, on both builds)
 python tests/test_compiler.py           # the compiler's wrong condition shapes are the known ones
@@ -29,7 +31,8 @@ ruff check --config ruff.toml . && python tools/readability.py && pyright   # th
 
 - **The engine is written from the spec** (`../haunted-house/docs/spec.md` and `game/player.py`), never from
   the original's code, and not from the NES game's assembly.
-- **Prove it.** After any change to `src/`, run `tests/verify_engine.py` on both builds.
+- **Prove it.** After any change to `src/`, run `tests/verify_engine.py` on both builds; after any change to
+  the sound's events, `tests/test_events.py` too.
 - **Never commit** the 2600 ROM, a faithful ROM, the emulator core, PVSnesLib, the audio driver, or
   `private/`.
 - **Art and songs are text**, drawn and written in the sibling repositories' sources and built from there.

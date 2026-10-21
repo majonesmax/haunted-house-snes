@@ -99,6 +99,7 @@ int main(void)
 {
     Controls controls;
     u16 last_vblank;
+    set_up_audio();           /* (first: the sound driver starts with interrupts still off) */
     consoleInit();
     set_up_picture();
     setScreenOn();
@@ -110,6 +111,7 @@ int main(void)
         read_controls(&controls);
         game_frame(&controls);
         compose_status();     /* the status band, if what it shows has changed */
+        audio_frame();        /* the SNES's sound for what just happened */
         frames_done++;
         note_busiest();
         WaitForVBlank();

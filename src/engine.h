@@ -55,7 +55,12 @@ void draw_cast(void);
 /* light.c */
 void set_up_light(void);
 void draw_light(void);
-void aim_light_channel(void);   /* the light's HDMA channel at its table: each frame, after any copies */
+void aim_light_channel(void);
+extern u8 lightning_flashing;   /* the original's lightning: its walls flash this frame */
+
+/* audio.c */
+void set_up_audio(void);
+void audio_frame(void);   /* the light's HDMA channel at its table: each frame, after any copies */
 
 /* status.c */
 void set_up_status(void);

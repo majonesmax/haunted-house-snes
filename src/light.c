@@ -109,6 +109,7 @@ void set_up_light(void)
 /* The lightning (the spec's rule, as the NES game's lightning_now): while dying, every fourth frame; else
    while a monster is in the room, on 4 frames in 64; each time on the toss of the random numbers' low
    bit. */
+u8 lightning_flashing;               /* the original's walls flash this frame (audio.c hears it) */
 static u8 lightning_now(void)
 {
     u8 clock = RAM(CLOCK);
@@ -137,12 +138,13 @@ static void set_colour_rules(void)
     u8 red = 0;
     u8 green = 0;
     u8 blue = 0;
+    lightning_flashing = lightning_now();
     if (lights_on) {
         mask = MASK_NOTHING;
         math = NO_MATH;
     } else if (RAM(GAME_NUMBER) == 0) {
         mask = MASK_FLOOR_ONLY;          /* (the walls moonlit: the lightning isn't seen on them) */
-    } else if (lightning_now()) {
+    } else if (lightning_flashing) {
         mask = MASK_FLOOR_ONLY;
         math = WASH_WALLS;
         red = WASH_RED;

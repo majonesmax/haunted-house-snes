@@ -1,11 +1,12 @@
 ; The loops this compiler's code can't afford every frame, in 65816 assembly (docs/decisions.md, "The
 ; hard parts"): placing a cast picture on the screen and putting its sprites into the sprite table,
-; building the match's light's window rows, and checking whether the status band has anything new to
-; show. Each takes its arguments in C variables (src/cast.c, src/light.c declare them), so there's
+; building the match's light's window rows, checking whether the status band has anything new to show,
+; and hearing what's just happened for the sound effects. Each takes its arguments in C variables (src/cast.c, src/light.c declare them), so there's
 ; no calling convention to get wrong; each keeps every register and flag it touches. The data bank is set
 ; to $7E, work RAM, where the C variables and the sprite table are; ROM tables are read with long
 ; addresses.
 .include "hdr.asm"
+.include "src/audio_ids.inc"     ; the effects' numbers (tools/make_sound.py)
 
 .section ".fast_asm" superfree
 
@@ -400,6 +401,340 @@ _key_byte:
     sta.w status_changed
 _key_byte_same:
     inx
+    rts
+
+; --- audio_events: the sound effect for what's just happened ------------------------------------------
+; The remaster's music/events.py, as the NES game's audio.s hear_events: what's changed in the game's
+; state since last frame - a match lit or out, the stairs, a doorway, a new room, footsteps, picking up
+; and putting down, urn pieces joining, a monster coming in, being caught, the lightning's thunder, a
+; bump, a locked door. In: the state (game_ram), lightning_flashing (src/light.c), and last frame's bytes
+; (the was_ variables, src/audio.c). Out: audio_effect, the effect wanted (the driver plays one a frame,
+; the lowest-numbered: tools/make_sound.py orders them), $FF for none; the was_ bytes brought up to date.
+.define AT_MATCHES_USED $82 - $80   ; (the state's bytes: their 2600 addresses, src/state.h, less $80)
+.define AT_FLAGS $8A - $80
+.define AT_FLOOR $8D - $80
+.define AT_MONSTERS_HERE $83 - $80
+.define AT_SOUND $93 - $80
+.define AT_ROOM_BEYOND $97 - $80
+.define AT_GAME_STATE $99 - $80
+.define AT_CARRIED $9A - $80
+.define AT_ROOM $9C - $80
+.define AT_URN_SHAPES $9D - $80
+.define AT_MONSTER_FLOOR $A5 - $80
+.define AT_POS_X $AA - $80
+.define AT_POS_Y $B5 - $80
+.define AT_MONSTER_ROOM $C5 - $80
+.define AT_LAST_MONSTER $EA - $80
+.define MATCH_LIT $40
+.define NOTHING $FF
+.define PLAYING $00
+.define DYING $01
+.define SELECTING $40
+.define STARTING $02
+.define SCEPTER 1
+.define BAT 1
+.define LAST_SHAPE 8
+.define WHOLE_URN 3
+.define STEP_EVERY 14               ; frames of walking between footsteps
+.define THUNDER_GAP 90              ; frames: one roll of thunder a strike, though the lightning flickers
+.define EFFECT_BLOCKED 2            ; the game's own sound byte: a locked door...
+.define EFFECT_BUMP 3               ; ...a bump into a wall
+audio_events:
+    php
+    phb
+    sep #$30                 ; A, X, Y 8-bit
+    lda #$7E
+    pha
+    plb
+    lda #NOTHING
+    sta.w audio_effect
+    jsr _biggest_group
+    sta.w group_now
+    lda.w game_ram + AT_GAME_STATE
+    cmp #SELECTING
+    beq _audio_remember
+    cmp #STARTING            ; (the frame after RESET: everything's changed, nothing's happened)
+    beq _audio_remember
+    lda.w was_state
+    cmp #SELECTING
+    beq _audio_remember
+    jsr _hear_match
+    jsr _hear_moving
+    jsr _hear_carrying
+    jsr _hear_urn
+    jsr _hear_danger
+    jsr _hear_game_sounds
+_audio_remember:
+    jsr _remember
+    plb
+    plp
+    rtl
+
+; A = an effect: wanted, if it's numbered lower than the one wanted so far.
+_want:
+    cmp.w audio_effect
+    bcs _want_done
+    sta.w audio_effect
+_want_done:
+    rts
+
+_hear_match:
+    lda.w game_ram + AT_MATCHES_USED
+    cmp.w was_matches
+    beq _match_not_lit
+    lda #SFX_match_strike
+    jmp _want
+_match_not_lit:
+    lda.w was_lit
+    beq _match_done
+    lda.w game_ram + AT_FLAGS
+    and #MATCH_LIT
+    bne _match_done
+    lda #SFX_match_out
+    jmp _want
+_match_done:
+    rts
+
+; The stairs; else a doorway, a new room, and footsteps: one as walking starts, then one every
+; STEP_EVERY frames of it.
+_hear_moving:
+    lda.w game_ram + AT_FLOOR
+    cmp.w was_floor
+    beq _same_floor
+    stz.w walking
+    bcc _went_down           ; (the floor's number is lower)
+    lda #SFX_stairs_up
+    jmp _want
+_went_down:
+    lda #SFX_stairs_down
+    jmp _want
+_same_floor:
+    lda.w game_ram + AT_ROOM_BEYOND
+    cmp #NOTHING
+    beq _no_doorway
+    lda.w was_beyond
+    cmp #NOTHING
+    bne _no_doorway
+    lda #SFX_door_open
+    jsr _want
+_no_doorway:
+    lda.w game_ram + AT_ROOM
+    cmp.w was_room
+    beq _steps
+    lda #SFX_door_close
+    jsr _want
+_steps:
+    lda.w game_ram + AT_GAME_STATE
+    bne _standing
+    lda.w game_ram + AT_POS_X
+    cmp.w was_x
+    bne _walking
+    lda.w game_ram + AT_POS_Y
+    cmp.w was_y
+    beq _standing
+_walking:
+    inc.w walking
+    lda.w walking
+    cmp #1
+    bne _step_counted
+    lda #SFX_footstep
+    jsr _want
+_step_counted:
+    lda.w walking
+    cmp #STEP_EVERY
+    bcc _moving_done
+_standing:
+    stz.w walking
+_moving_done:
+    rts
+
+; Picked up: the key, the scepter or an urn piece; put down (not when it's taken from you).
+_hear_carrying:
+    lda.w game_ram + AT_CARRIED
+    cmp.w was_carried
+    beq _carrying_done
+    cmp #NOTHING
+    beq _put_down
+    lda.w was_carried
+    cmp #NOTHING
+    bne _carrying_done
+    lda.w game_ram + AT_CARRIED
+    beq _picked_key          ; (the key is item 0)
+    cmp #SCEPTER
+    beq _picked_scepter
+    lda #SFX_pickup_urn
+    jmp _want
+_picked_key:
+    lda #SFX_pickup_key
+    jmp _want
+_picked_scepter:
+    lda #SFX_pickup_scepter
+    jmp _want
+_put_down:
+    lda.w game_ram + AT_GAME_STATE
+    ora.w was_state
+    bne _carrying_done
+    lda #SFX_drop
+    jmp _want
+_carrying_done:
+    rts
+
+; Urn pieces joined: the biggest group grew to two pieces, or to the whole urn.
+_hear_urn:
+    lda.w group_now
+    cmp.w was_group
+    beq _urn_done
+    bcc _urn_done
+    cmp #2
+    bcc _urn_done
+    cmp #WHOLE_URN
+    beq _urn_whole
+    lda #SFX_urn_join
+    jmp _want
+_urn_whole:
+    lda #SFX_urn_whole
+    jmp _want
+_urn_done:
+    rts
+
+; Out: A = how many pieces the biggest group of urn pieces has (0 when they're all apart).
+_biggest_group:
+    stz.w group_biggest
+    ldy #2                   ; Y: the urn piece, 2 down to 0
+_group_piece:
+    lda.w game_ram + AT_URN_SHAPES,y
+    cmp #(LAST_SHAPE + 1)
+    bcs _group_next          ; (joined into another: $FF)
+    tax
+    lda.l _shape_pieces,x
+    cmp.w group_biggest
+    bcc _group_next
+    sta.w group_biggest
+_group_next:
+    dey
+    bpl _group_piece
+    lda.w group_biggest
+    rts
+_shape_pieces:
+    .db 0, 0, 1, 1, 1, 2, 2, 2, 3   ; an urn shape's pieces (shapes 2-8)
+
+; Caught (the moment it happens); else a monster come into the room; and the lightning's thunder.
+_hear_danger:
+    lda.w game_ram + AT_GAME_STATE
+    cmp #DYING
+    bne _not_caught
+    lda.w was_state
+    cmp #DYING
+    beq _not_caught          ; (dying since before: not the moment of being caught)
+    lda #SFX_caught
+    jsr _want
+    bra _lightning
+_not_caught:
+    lda.w game_ram + AT_MONSTERS_HERE
+    beq _lightning
+    lda.w was_here
+    bne _lightning
+    jsr _monster_here
+    jsr _want
+_lightning:
+    lda.w lightning_flashing
+    beq _danger_done
+    lda.w was_flash
+    bne _danger_done
+    lda.w since_thunder
+    cmp #THUNDER_GAP
+    bcc _danger_done
+    stz.w since_thunder
+    lda #SFX_thunder
+    jmp _want
+_danger_done:
+    rts
+
+; Out: A = the effect for the first monster in the room (or through its doorway): the ghost, the bat
+; or a tarantula.
+_monster_here:
+    ldx #0                   ; X: the monster
+_monster_next:
+    lda.w game_ram + AT_MONSTER_FLOOR,x
+    cmp.w game_ram + AT_FLOOR
+    bne _monster_skip
+    lda.w game_ram + AT_MONSTER_ROOM,x
+    cmp.w game_ram + AT_ROOM
+    beq _monster_found
+    cmp.w game_ram + AT_ROOM_BEYOND
+    beq _monster_found
+_monster_skip:
+    inx
+    cpx.w game_ram + AT_LAST_MONSTER
+    beq _monster_next
+    bcc _monster_next
+    lda #SFX_monster_tarantula
+    rts
+_monster_found:
+    txa
+    beq _monster_ghost       ; (the ghost is monster 0)
+    cmp #BAT
+    beq _monster_bat
+    lda #SFX_monster_tarantula
+    rts
+_monster_ghost:
+    lda #SFX_monster_ghost
+    rts
+_monster_bat:
+    lda #SFX_monster_bat
+    rts
+
+; What only the game knows: a bump into a wall, a door that won't open.
+_hear_game_sounds:
+    lda.w game_ram + AT_SOUND
+    cmp.w was_sound
+    beq _game_sounds_done
+    cmp #EFFECT_BUMP
+    bne _not_bump
+    lda #SFX_bump
+    jmp _want
+_not_bump:
+    cmp #EFFECT_BLOCKED
+    bne _game_sounds_done
+    lda #SFX_locked
+    jmp _want
+_game_sounds_done:
+    rts
+
+; This frame's bytes, for next frame to compare with.
+_remember:
+    lda.w game_ram + AT_MATCHES_USED
+    sta.w was_matches
+    lda.w game_ram + AT_FLAGS
+    and #MATCH_LIT
+    sta.w was_lit
+    lda.w game_ram + AT_FLOOR
+    sta.w was_floor
+    lda.w game_ram + AT_ROOM
+    sta.w was_room
+    lda.w game_ram + AT_ROOM_BEYOND
+    sta.w was_beyond
+    lda.w game_ram + AT_POS_X
+    sta.w was_x
+    lda.w game_ram + AT_POS_Y
+    sta.w was_y
+    lda.w game_ram + AT_GAME_STATE
+    sta.w was_state
+    lda.w game_ram + AT_CARRIED
+    sta.w was_carried
+    lda.w group_now
+    sta.w was_group
+    lda.w game_ram + AT_MONSTERS_HERE
+    sta.w was_here
+    lda.w lightning_flashing
+    sta.w was_flash
+    lda.w game_ram + AT_SOUND
+    sta.w was_sound
+    lda.w since_thunder
+    cmp #$FF
+    beq _remembered          ; (held at 255)
+    inc.w since_thunder
+_remembered:
     rts
 
 .ends

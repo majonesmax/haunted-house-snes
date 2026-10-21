@@ -14,6 +14,7 @@ READY = 0x42              # src/main.c's ready_flag once the console is set up
 WORK_RAM_BANK = 0x7E0000  # the symbols' addresses are in the 65816's map; the core hands out work RAM from 0
 FRAMES = 60
 SLACK = 2                 # frames the counter may be out by (the boot's last frames)
+MOST_BOOT_FRAMES = 90      # the set-up, the sound's loading most of it, takes about 36
 
 
 def main() -> None:
@@ -21,7 +22,10 @@ def main() -> None:
     snes = Snes(build(shareable=shareable))
     where = symbols(shareable)
     frame_count, ready_flag = where["frame_count"] - WORK_RAM_BANK, where["ready_flag"] - WORK_RAM_BANK
-    snes.run(10)
+    for _frame in range(MOST_BOOT_FRAMES):
+        snes.run(1)
+        if snes.ram[ready_flag] == READY:
+            break
     if snes.ram[ready_flag] != READY:
         found = snes.ram[ready_flag]
         sys.exit(f"FAIL: ready_flag is ${found:02X}, not ${READY:02X}: the console never got set up")

@@ -70,7 +70,9 @@ lightning switch is a setting on the title, Y the hint, Y + Select the lights-on
    Select); the sprites placed and the light's rows built in assembly, two lines a row. Still to do: the ghost's translucency (it conflicts with the ring's fixed-colour math),
    the match's flicker, a dim floor outside the light in game 1 (the look's moon shafts).
 3. **The sound** - the driver in; the orchestra's instruments rendered short and encoded as samples; the
-   songs from the pack's `music.json` written out as MML; the twenty effects.
+   songs from the pack's `music.json` written out as MML; the twenty effects. Done so far: the driver in,
+   twelve instruments (about 20K), the twenty effects as MML on them, heard on the remaster's events
+   (`tests/test_events.py`: every frame agrees). Still to do: the music.
 4. **The screens** - the story, the title with its rain and fading lightning, the help, game over, the
    ending at dawn; the hints and notes in play.
 5. **Release** - README with pictures, `build.yml` (a tag makes the release), the browser page with

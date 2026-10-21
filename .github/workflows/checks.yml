@@ -46,3 +46,6 @@ jobs:
       - name: The engine, frame by frame against the remaster's model, on the shareable build
         working-directory: haunted-house-snes
         run: python tests/verify_engine.py --shareable 1500
+      - name: The sound effects fire on the right events
+        working-directory: haunted-house-snes
+        run: python tests/test_events.py 300

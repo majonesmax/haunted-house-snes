@@ -26,6 +26,34 @@ game's log is the model for this one.
   when the rules change. The cheat is the NES game's: the button held, Select toggles it, and the game
   doesn't hear that Select. In game 1 the walls stay moonlit through a flash, as the SNES look has it.
 
+## 2026-10-20: the sound effects as notes on sampled instruments, not recordings
+
+- **The effects are played, not stored.** The remaster's orchestral effects add up to 17 seconds of sound,
+  about 300K as SNES samples; sound memory is 64K, the driver's included. So tools/make_sound.py makes the
+  orchestra's instruments into samples - the steady ones (organ, strings, brass) as one looped cycle of 64
+  samples, the struck ones (harp, bell, harpsichord, timpani, a knock on wood, the door's creak) as short
+  one-shots at 8-16 kHz - and writes each effect as the driver's MML: the remaster's own notes, on those
+  instruments. Twelve instruments and twenty effects take about 20K. The scrapes, the breath and the
+  thunder are the sound chip's noise generator.
+- **An effect plays on one channel**, so where the remaster layers sounds at once the SNES plays them one
+  after another, or keeps the telling part (the stairs' harp, not its footfalls under it). The three
+  chords an effect needs - the ghost's organ, the whole urn's strings, the stab of being caught - are each
+  one looped waveform with every note in (whole numbers of cycles in a 512- or 2048-sample loop), so they
+  still sound as chords and can be played at any pitch.
+- **What's heard is the remaster's music/events.py**, as the NES game's audio.s has it, in assembly
+  (src/fast.asm, audio_events): in C it took 14 scanlines a frame, and the late frames went from 0.5% to
+  1.6%. `tests/test_events.py` runs the engine check's bot and has the remaster's own EventWatcher, given
+  each frame's state, say which effect it asks for; the SNES must choose the same, and does on every frame.
+  It caught two differences from the remaster: the frame after RESET (everything changes, nothing happens)
+  was heard, and a monster coming in while the player was dying wasn't.
+- **The driver is started before the library's console set-up** (it wants interrupts off), with the
+  silent song loaded so that effects play: the driver plays nothing until a song is in. The start-up
+  takes about 36 frames now, most of it loading the sound.
+- **A name clash cost an hour.** The new sound code's `sound_frame` had the name of the engine's own
+  (sounds.c, the 2600's sound state); the linker kept one without complaint, so the main loop ran the
+  engine's sound step twice and the new code not at all. The SNES's sound is audio.c, `audio_frame`.
+- **The ROM is 512K now**: the code and pictures fill the first 256K, the sound data starts at bank 8.
+
 ## The hard parts
 
 - **The compiler is wrong about some conditions.** 816-tcc compiles `a || !b || c`, `!a || b` and
