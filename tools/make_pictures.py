@@ -126,7 +126,7 @@ def fit_tiles(picture: Picture, drawn: np.ndarray) -> Picture:
             colours, counts = np.unique(block[mask].reshape(-1, 3), axis=0, return_counts=True)
             if len(colours) <= COLOURS_PER_PALETTE:
                 continue
-            order = np.argsort(-counts)
+            order = np.argsort(-counts, kind="stable")   # (ties in order: the same on every computer)
             kept = [as_colour(colours[index]) for index in order[:COLOURS_PER_PALETTE]]
             for index in order[COLOURS_PER_PALETTE:]:
                 rare = as_colour(colours[index])
